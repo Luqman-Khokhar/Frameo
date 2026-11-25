@@ -1,0 +1,8 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Frameo countdown</title>
+<style>html,body{margin:0;background:transparent;overflow:hidden;user-select:none}
+.w{width:220px;height:220px;display:grid;place-items:center}
+.c{width:150px;height:150px;border-radius:50%;background:#3A3C36;color:#FCF0DA;display:grid;place-items:center;font:600 84px 'Space Grotesk',Inter,system-ui,sans-serif;border:1px solid rgba(252,240,218,.16)}
+.l{position:absolute;bottom:14px;width:100%;text-align:center;font:500 13px Inter,system-ui,sans-serif;color:#FCF0DA;text-shadow:0 1px 3px rgba(0,0,0,.6)}</style></head>
+<body><div class="w"><div class="c" id="n">3</div></div><div class="l">Recording starts…</div>
+<script>tb.onCount(n=>document.getElementById('n').textContent=n)</script></body></html>
