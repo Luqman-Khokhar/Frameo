@@ -7,7 +7,7 @@ description: Floating recording toolbar screen (timer, pause/resume, stop, hidde
 
 236x44 pill window (`TB` in main.js), frameless, transparent, always-on-top ('screen-saver' level), non-focusable, skip taskbar, shown with `showInactive`. Placed bottom-center of primary work area. Preload `preload-toolbar.js` exposes `tb.pause`, `tb.stop`, `tb.onTick`, `tb.onCount`.
 
-Contents: drag grip, pulsing amber dot (hollow when paused), timer mm:ss (h:mm:ss over an hour), "PAUSED" label, pause/resume button (icon + aria-label swap), stop button. Whole body except buttons is a drag region.
+Contents: drag grip, pulsing amber dot (hollow when paused), timer mm:ss (h:mm:ss over an hour), "PAUSED" label, pause/resume button (icon + aria-label swap), stop button. Dragging is manual (CSS app-region drag does not work on this non-focusable transparent window): pointerdown on grip/timer area sends screen coords via `tb.move` -> `toolbar:move` -> `setBounds` with fixed size.
 
 Updates: main sends `tick` {ms, paused} every 500 ms while recording and immediately on pause/resume. Buttons send `toolbar:pause` / `toolbar:stop` (ipcMain.on).
 
