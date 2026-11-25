@@ -5,18 +5,13 @@
   const FONT = (s) => '600 ' + s + 'px Inter, Ubuntu, system-ui, sans-serif';
   const textSize = (o) => o.w * 4 + 12;
 
-  function segDist(px, py, ax, ay, bx, by) {
-    const dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy;
-    const t = l ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l)) : 0;
-    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
-  }
   const norm = (a, b) => ({ x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), w: Math.abs(b[0] - a[0]), h: Math.abs(b[1] - a[1]) });
 
   function create(opts) {
     const canvas = opts.canvas, base = opts.base || null, onChange = opts.onChange || function () {};
     if (base) { canvas.width = base.width; canvas.height = base.height; } else { canvas.width = opts.width || canvas.width; canvas.height = opts.height || canvas.height; }
     const ctx = canvas.getContext('2d');
-    let hist = [[]], hi = 0, list = hist[0], cur = null, erasing = null, last = null, raf = 0;
+    let hist = [[]], hi = 0, list = hist[0], cur = null, raf = 0;
 
     const p = { tool: 'pen', color: '#E5484D', width: 6, shift: false };
 
@@ -26,9 +21,10 @@
       let w = 0; for (const l of lines) w = Math.max(w, ctx.measureText(l).width);
       return { x: o.x, y: o.y, w, h: lines.length * s * 1.25, s, lines };
     }
-    function draw(o) {
+    function draw(o, ctx) {
       ctx.strokeStyle = o.c; ctx.fillStyle = o.c; ctx.lineWidth = o.w; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      if (o.t === 'pen') {
+      ctx.globalCompositeOperation = o.t === 'erase' ? 'destination-out' : 'source-over'; // erase strokes only wipe ink, never the base image
+      if (o.t === 'pen' || o.t === 'erase') {
         const q = o.pts;
         if (q.length < 4) { ctx.beginPath(); ctx.arc(q[0], q[1], o.w / 2, 0, 6.2832); ctx.fill(); return; }
         ctx.beginPath(); ctx.moveTo(q[0], q[1]);
@@ -47,47 +43,23 @@
       else if (o.t === 'ellipse') {
         const r = norm(o.a, o.b); ctx.beginPath(); ctx.ellipse(r.x + r.w / 2, r.y + r.h / 2, r.w / 2, r.h / 2, 0, 0, 6.2832); ctx.stroke();
       } else if (o.t === 'text') {
-        const b = textBox(o); ctx.textBaseline = 'top';
+        const b = textBox(o); ctx.textBaseline = 'top'; ctx.font = FONT(b.s);
         b.lines.forEach((l, i) => ctx.fillText(l, o.x, o.y + i * b.s * 1.25));
       }
+      ctx.globalCompositeOperation = 'source-over';
     }
+    // Ink is drawn on its own layer so erase strokes (destination-out) can clear ink without touching the base image.
+    const layer = document.createElement('canvas'), lctx = layer.getContext('2d');
     function render() {
       raf = 0; ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (base) ctx.drawImage(base, 0, 0);
-      for (const o of (erasing || list)) draw(o);
-      if (cur) draw(cur);
+      if (layer.width !== canvas.width || layer.height !== canvas.height) { layer.width = canvas.width; layer.height = canvas.height; }
+      lctx.clearRect(0, 0, layer.width, layer.height);
+      for (const o of list) draw(o, lctx);
+      if (cur) draw(cur, lctx);
+      ctx.drawImage(layer, 0, 0);
     }
     function schedule() { if (!raf) raf = requestAnimationFrame(render); }
-
-    /* ---- erasing ---- */
-    function hit(o, x, y, tol) {
-      const r = o.w / 2 + tol;
-      if (o.t === 'pen') {
-        const q = o.pts; if (q.length < 4) return Math.hypot(x - q[0], y - q[1]) <= r;
-        for (let i = 0; i < q.length - 2; i += 2) if (segDist(x, y, q[i], q[i + 1], q[i + 2], q[i + 3]) <= r) return true;
-        return false;
-      }
-      if (o.t === 'line' || o.t === 'arrow') return segDist(x, y, o.a[0], o.a[1], o.b[0], o.b[1]) <= r;
-      if (o.t === 'rect') {
-        const b = norm(o.a, o.b), x2 = b.x + b.w, y2 = b.y + b.h;
-        return Math.min(segDist(x, y, b.x, b.y, x2, b.y), segDist(x, y, x2, b.y, x2, y2), segDist(x, y, x2, y2, b.x, y2), segDist(x, y, b.x, y2, b.x, b.y)) <= r;
-      }
-      if (o.t === 'ellipse') {
-        const b = norm(o.a, o.b), rx = Math.max(b.w / 2, 1), ry = Math.max(b.h / 2, 1);
-        return Math.abs(Math.hypot((x - b.x - rx) / rx, (y - b.y - ry) / ry) - 1) * Math.min(rx, ry) <= r;
-      }
-      const b = textBox(o); return x >= b.x - tol && x <= b.x + b.w + tol && y >= b.y - tol && y <= b.y + b.h + tol;
-    }
-    function tol() { const r = canvas.getBoundingClientRect(); return 8 * (r.width ? canvas.width / r.width : 1); }
-    function eraseAt(x, y) {
-      const t = tol(), a = last || [x, y], n = Math.max(1, Math.ceil(Math.hypot(x - a[0], y - a[1]) / (t / 2)));
-      for (let i = 1; i <= n; i++) {
-        const px = a[0] + (x - a[0]) * i / n, py = a[1] + (y - a[1]) * i / n;
-        const keep = erasing.filter((o) => !hit(o, px, py, t));
-        if (keep.length !== erasing.length) erasing = keep;
-      }
-      last = [x, y]; schedule();
-    }
 
     /* ---- history ---- */
     function commit(next) {
@@ -105,22 +77,20 @@
     }
     p.pointerDown = function (x, y) {
       if (p.tool === 'text') return;
-      if (p.tool === 'eraser') { erasing = list.slice(); last = null; eraseAt(x, y); return; }
-      const base0 = { t: p.tool, c: p.color, w: p.width };
-      cur = p.tool === 'pen' ? { ...base0, pts: [x, y] } : { ...base0, a: [x, y], b: [x, y] };
+      const eraser = p.tool === 'eraser';
+      const base0 = { t: eraser ? 'erase' : p.tool, c: p.color, w: eraser ? p.width * 3 : p.width };
+      cur = (p.tool === 'pen' || eraser) ? { ...base0, pts: [x, y] } : { ...base0, a: [x, y], b: [x, y] };
       schedule();
     };
     p.pointerMove = function (x, y) {
-      if (erasing) return eraseAt(x, y);
       if (!cur) return;
-      if (cur.t === 'pen') { const q = cur.pts; if (Math.hypot(x - q[q.length - 2], y - q[q.length - 1]) >= 1) q.push(x, y); } else shape(x, y);
+      if (cur.pts) { const q = cur.pts; if (Math.hypot(x - q[q.length - 2], y - q[q.length - 1]) >= 1) q.push(x, y); } else shape(x, y);
       schedule();
     };
     p.pointerUp = function () {
-      if (erasing) { const changed = erasing.length !== list.length, e = erasing; erasing = null; last = null; if (changed) commit(e); else schedule(); return; }
       if (!cur) return;
       const o = cur; cur = null;
-      if (o.t !== 'pen' && Math.hypot(o.b[0] - o.a[0], o.b[1] - o.a[1]) < 2) return schedule();
+      if (!o.pts && Math.hypot(o.b[0] - o.a[0], o.b[1] - o.a[1]) < 2) return schedule();
       commit(list.concat([o]));
     };
     p.addText = function (x, y, str) { str = String(str).replace(/\s+$/, ''); if (!str.trim()) return; commit(list.concat([{ t: 'text', c: p.color, w: p.width, x, y, s: str }])); };

@@ -23,6 +23,7 @@ button:focus-visible{outline:2px solid #F2C46A;outline-offset:1px}
 .panel[hidden]{display:none}
 .pr{display:flex;align-items:center;justify-content:space-between;height:32px}
 .pr>span{display:flex;align-items:center;gap:2px}
+.panel .pr:first-child .pb{width:24px}
 .panel .pb{width:28px;height:28px;border-radius:8px;display:grid;place-items:center}
 .panel .pb.on{background:rgba(252,240,218,.22)}
 .panel .pb:disabled{opacity:.4}
@@ -54,7 +55,7 @@ bar.addEventListener('pointermove',e=>{if(dr)tb.move(dr.wx+e.screenX-dr.sx,dr.wy
 const endDrag=()=>{dr=null;document.body.style.cursor=''};
 bar.addEventListener('pointerup',endDrag);bar.addEventListener('pointercancel',endDrag);
 const I=d=>'<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+d+'</svg>';
-const TOOLS=[['pen','Pen','<path d="M4 16l1-4 8.5-8.5a1.4 1.4 0 0 1 2 0l1 1a1.4 1.4 0 0 1 0 2L8 15z"/>'],['line','Line','<path d="M4.5 15.5l11-11"/>'],['arrow','Arrow','<path d="M4.5 15.5l11-11M8.5 4.5h7v7"/>'],['rect','Rectangle','<rect x="4" y="5.5" width="12" height="9" rx="1"/>'],['ellipse','Ellipse','<ellipse cx="10" cy="10" rx="6.5" ry="5"/>'],['eraser','Eraser','<path d="M8 15.5h8M4.8 11.7l5.5-5.9a1.4 1.4 0 0 1 2 0l2.6 2.6a1.4 1.4 0 0 1 0 2L10.5 15.5H7.7z"/>']];
+const TOOLS=[['pen','Pen','<path d="M4 16l1-4 8.5-8.5a1.4 1.4 0 0 1 2 0l1 1a1.4 1.4 0 0 1 0 2L8 15z"/>'],['line','Line','<path d="M4.5 15.5l11-11"/>'],['arrow','Arrow','<path d="M4.5 15.5l11-11M8.5 4.5h7v7"/>'],['rect','Rectangle','<rect x="4" y="5.5" width="12" height="9" rx="1"/>'],['ellipse','Ellipse','<ellipse cx="10" cy="10" rx="6.5" ry="5"/>'],['text','Text','<path d="M5 5.5h10M10 5.5v9.5M8 15h4"/>'],['eraser','Eraser','<path d="M8 15.5h8M4.8 11.7l5.5-5.9a1.4 1.4 0 0 1 2 0l2.6 2.6a1.4 1.4 0 0 1 0 2L10.5 15.5H7.7z"/>']];
 const CMDS=[['undo','Undo','<path d="M7.5 5L4 8.5 7.5 12M4.5 8.5h7a4 4 0 0 1 0 8H9"/>'],['redo','Redo','<path d="M12.5 5L16 8.5 12.5 12M15.5 8.5h-7a4 4 0 0 0 0 8H11"/>'],['clear','Clear all','<path d="M4.5 6h11M8 6V4.5h4V6M6 6l.6 9.5h6.8L14 6"/>']];
 const COLORS=['#E5484D','#F2C46A','#46A758','#3E63DD','#8E4EC6','#FFFFFF'], WS=[[3,'Thin',2],[6,'Medium',4],[12,'Thick',7]];
 const ps={tool:'pen',color:COLORS[0],w:6};

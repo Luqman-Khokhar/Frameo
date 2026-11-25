@@ -62,7 +62,7 @@ async function paintToggle() {
   else { paintOpen = false; toolbarWin.setBounds({ x: b.x, y: paintUp ? b.y + extra : b.y, width: TB.w, height: TB.h }); }
   toolbarWin.webContents.send('paint', { open: paintOpen, up: paintUp });
   await live.setDraw(paintOpen);
-  if (toolbarWin && !toolbarWin.isDestroyed()) live.cutout(toolbarWin.getBounds()); // the WM keeps the overlay above the toolbar, so punch the toolbar's rect out of the overlay: it stays clickable while drawing
+  if (toolbarWin && !toolbarWin.isDestroyed()) live.setCut('toolbar', toolbarWin.getBounds()); // the WM keeps the overlay above the toolbar, so punch the toolbar's rect out of the overlay: it stays clickable while drawing
 }
 
 async function countdown(n) {
@@ -331,11 +331,11 @@ ipcMain.handle('win:min', () => mainWin && mainWin.minimize());
 ipcMain.handle('win:close', () => mainWin && mainWin.close());
 ipcMain.on('toolbar:pause', pauseResume);
 ipcMain.on('toolbar:stop', stopRecording);
-ipcMain.on('toolbar:move', (_e, x, y) => { if (toolbarWin && !toolbarWin.isDestroyed()) { toolbarWin.setBounds({ x: Math.round(x), y: Math.round(y), width: TB.w, height: paintOpen ? TB.h + TB.ph + TB.gap : TB.h }); live.cutout(toolbarWin.getBounds()); } });
+ipcMain.on('toolbar:move', (_e, x, y) => { if (toolbarWin && !toolbarWin.isDestroyed()) { toolbarWin.setBounds({ x: Math.round(x), y: Math.round(y), width: TB.w, height: paintOpen ? TB.h + TB.ph + TB.gap : TB.h }); live.setCut('toolbar', toolbarWin.getBounds()); } });
 ipcMain.on('paint:toggle', (e) => { if (toolbarWin && e.sender === toolbarWin.webContents) paintToggle(); });
 ipcMain.on('paint:cmd', (e, c, a) => {
   if (!toolbarWin || e.sender !== toolbarWin.webContents || !paintOpen) return;
-  if (c === 'tool' || c === 'color' || c === 'width' || c === 'undo' || c === 'redo' || c === 'clear') live.send(c, a);
+  if (c === 'tool' && a === 'text') live.send(c, a); else if (c === 'tool' || c === 'color' || c === 'width' || c === 'undo' || c === 'redo' || c === 'clear') live.send(c, a);
 });
 
 /* ---------------- lifecycle ---------------- */
