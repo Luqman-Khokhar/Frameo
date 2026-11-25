@@ -9,6 +9,7 @@ const PRESETS = {
   medium: { label: 'Medium', factor: 0.5, maxH: 1080, maxFps: 30, audioK: 96, channels: 2 },
   low: { label: 'Low', factor: 0.2, maxH: 720, maxFps: 24, audioK: 64, channels: 1 }
 };
+const STALL_MS = 30000; // no ffmpeg progress for this long = stuck
 const OVERHEAD = 0.96; // container + rate-control slack
 const minVideoK = (h) => (h >= 1080 ? 600 : h >= 720 ? 350 : h >= 480 ? 200 : 120); // below this a screen recording is unwatchable
 const LADDER = [1080, 720, 480, 360];
@@ -69,31 +70,36 @@ function run(info, pl, outDir, onProgress = () => {}) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frameo-cmp-'));
   const out = path.join(tmpDir, 'out.mp4');
   let child = null, cancelled = false;
-  const cancel = () => { cancelled = true; if (child) child.kill('SIGTERM'); };
+  const hardKill = (c) => { c.kill('SIGTERM'); setTimeout(() => c.kill('SIGKILL'), 2000).unref(); }; // a stuck ffmpeg ignores SIGTERM
+  const cancel = () => { cancelled = true; if (child) hardKill(child); };
 
+  /* n = 1 or 2 for two-pass, 0 for a single-pass fallback */
   const pass = (n, vK, retry) => new Promise((resolve, reject) => {
     if (cancelled) return reject(Object.assign(new Error('Cancelled'), { cancelled: true }));
-    const args = ['-y', '-hide_banner', '-loglevel', 'error', '-nostdin', '-progress', 'pipe:1', '-nostats', '-i', info.file, '-map', '0:v:0', '-vf', pl.vf,
-      '-c:v', 'libx264', '-preset', 'medium', '-b:v', vK + 'k', '-pix_fmt', 'yuv420p', '-pass', String(n), '-passlogfile', path.join(tmpDir, 'p')];
+    const args = ['-y', '-hide_banner', '-loglevel', 'error', '-nostdin', '-progress', 'pipe:1', '-nostats', '-i', info.file, '-map', '0:v:0', '-fps_mode', 'cfr', '-vf', pl.vf, // cfr in BOTH passes: mismatched frame counts make pass 2 hang
+      '-c:v', 'libx264', '-preset', 'medium', '-b:v', vK + 'k', '-pix_fmt', 'yuv420p'];
+    if (n) args.push('-pass', String(n), '-passlogfile', path.join(tmpDir, 'p'));
     if (n === 1) args.push('-an', '-f', 'null', '/dev/null');
     else {
       if (info.hasAudio) args.push('-map', '0:a:0', '-c:a', 'aac', '-b:a', pl.audioK + 'k', '-ac', String(pl.channels)); else args.push('-an');
       args.push('-movflags', '+faststart', out);
     }
     child = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let err = '', buf = '';
+    const c = child; let err = '', buf = '', lastAt = Date.now(), stalled = false;
+    const watchdog = setInterval(() => { if (Date.now() - lastAt > STALL_MS) { stalled = true; c.kill('SIGKILL'); } }, 2000);
     child.stderr.on('data', (d) => { err = (err + d).slice(-800); });
     child.stdout.on('data', (d) => {
-      buf += d; const lines = buf.split('\n'); buf = lines.pop();
+      lastAt = Date.now(); buf += d; const lines = buf.split('\n'); buf = lines.pop();
       for (const l of lines) {
         const m = /^out_time_(?:us|ms)=(\d+)/.exec(l); if (!m) continue;
         const frac = Math.min(1, Number(m[1]) / 1e6 / info.duration);
-        onProgress({ pct: n === 1 ? frac * 0.4 : 0.4 + frac * 0.6, pass: n, retry });
+        onProgress({ pct: n === 0 ? frac : n === 1 ? frac * 0.4 : 0.4 + frac * 0.6, pass: n, retry });
       }
     });
-    child.on('error', (e) => reject(e));
+    child.on('error', (e) => { clearInterval(watchdog); reject(e); });
     child.on('close', (code) => {
-      child = null;
+      clearInterval(watchdog); child = null;
+      if (stalled && !cancelled) return reject(Object.assign(new Error('Compression stalled and was stopped.'), { stalled: true }));
       if (cancelled) return reject(Object.assign(new Error('Cancelled'), { cancelled: true }));
       code === 0 ? resolve() : reject(new Error(err.trim() || 'ffmpeg failed (' + code + ').'));
     });
@@ -103,7 +109,8 @@ function run(info, pl, outDir, onProgress = () => {}) {
     try {
       let vK = pl.videoK;
       for (let attempt = 0; attempt < 2; attempt++) {
-        await pass(1, vK, attempt > 0); await pass(2, vK, attempt > 0);
+        try { await pass(1, vK, attempt > 0); await pass(2, vK, attempt > 0); }
+        catch (e) { if (!e.stalled) throw e; await pass(0, vK, true); } // two-pass stalled: fall back to single-pass
         const size = fs.statSync(out).size;
         if (size <= pl.targetBytes * 1.05 || attempt === 1) break;
         vK = Math.max(50, Math.floor(vK * pl.targetBytes / size * 0.96)); // came out too big: redo a little lower

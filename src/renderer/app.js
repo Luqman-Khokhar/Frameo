@@ -238,7 +238,7 @@ document.addEventListener('click', async (e) => {
     case 'cmp-pick': { const f = await api.cmpPick(); if (f) openCompress(f, false); return; }
     case 'cmp-close': S.cmp = null; return renderCompress();
     case 'cmp-go': return cmpStart();
-    case 'cmp-cancel': return api.cmpCancel();
+    case 'cmp-cancel': S.cmp.cancelling = true; renderCompress(); return api.cmpCancel();
     case 'cmp-retry': S.cmp.state = S.cmp.info ? 'idle' : 'error'; if (!S.cmp.info) return openCompress(S.cmp.file, S.cmp.fresh); return renderCompress();
     case 'cmp-dir': { const p = await api.chooseDir(S.st.compressDir); if (p) { await save({ compressDir: p }); renderCompress(); } return; }
     case 'choose-cmp-dir': { const p = await api.chooseDir(S.st.compressDir); if (p) { await save({ compressDir: p }); render(); } return; }
@@ -347,7 +347,7 @@ function renderCompress() {
       <div class="grp" style="gap:6px"><span class="sh">Save to</span><div class="row"><div class="fld" style="flex:1"><span style="letter-spacing:0;font-weight:500;color:var(--text);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(S.st.compressDir)}</span></div><button class="ghost" data-act="cmp-dir">Change…</button></div></div>
       <div class="sub">${orig}</div></div>
       <div class="pva"><span class="grow"></span><button class="ghost" data-act="cmp-close">Cancel</button><button class="solid" data-act="cmp-go">${c.key === 'original' ? 'Keep original' : 'Compress'}</button></div>`;
-  } else if (running) body = `<div class="cb"><div class="bar" id="cmpBar" role="progressbar" aria-label="Compression progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div><div class="sub tn" id="cmpTxt" aria-live="polite"></div></div><div class="pva"><span class="grow"></span><button class="ghost" data-act="cmp-cancel">Cancel</button></div>`;
+  } else if (running) body = `<div class="cb"><div class="bar" id="cmpBar" role="progressbar" aria-label="Compression progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div><div class="sub tn" id="cmpTxt" aria-live="polite"></div></div><div class="pva"><span class="grow"></span><button class="ghost" data-act="cmp-cancel" ${c.cancelling ? 'disabled' : ''}>${c.cancelling ? 'Cancelling…' : 'Cancel'}</button></div>`;
   else {
     const r = c.result, saved = Math.max(0, Math.round((1 - r.bytes / r.origBytes) * 100));
     body = `<div class="cb"><div class="row" style="gap:10px"><span style="color:var(--text)">${ico('check', 20)}</span><div><b>${esc(r.name)}</b><div class="sub tn">${fmtSize(r.bytes)} · ${saved}% smaller than ${fmtSize(r.origBytes)}</div></div></div><div class="sub">${r.trashed ? 'Original recording moved to Trash. ' : ''}Saved in ${esc(S.st.compressDir)}</div></div>
@@ -368,6 +368,7 @@ document.addEventListener('change', (e) => { if (e.target.id === 'cmpSel' && S.c
   api.on('compress:progress', (p) => { if (!S.cmp || S.cmp.state !== 'running') return; S.cmp.pct = p.pct; S.cmp.pass = p.pass; S.cmp.retry = p.retry; updateCmpProgress(); });
   api.on('compress:done', async (r) => {
     const c = S.cmp; if (!c) return;
+    c.cancelling = false;
     if (r.cancelled) { c.state = 'idle'; return renderCompress(); }
     if (r.error) { c.state = 'error'; c.message = r.message || 'Compression failed.'; return renderCompress(); }
     c.state = 'done'; c.result = r; await refreshRecents(); render();

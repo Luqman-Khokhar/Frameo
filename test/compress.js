@@ -18,10 +18,17 @@ const ok = (cond, msg) => { if (!cond) { console.error('[compress] FAIL', msg); 
     ok(last > 0.9, key + ' progress reached ' + last.toFixed(2));
     const after = await c.probe(r.path); ok(after.h <= pl.height && after.fps <= pl.fps + 0.5 && after.hasAudio, key + ' output ' + after.w + 'x' + after.h + ' ' + after.fps.toFixed(1) + 'fps');
   }
+  // regression: vertical clip whose video starts 33 ms after audio (a YouTube short) hung two-pass pass 2 before -fps_mode cfr
+  const vsrc = path.join(dir, 'short.mp4');
+  cp.execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-itsoffset', '0.0333', '-f', 'lavfi', '-i', 'testsrc2=size=720x1280:rate=30', '-f', 'lavfi', '-i', 'sine=frequency=440', '-t', '30', '-c:v', 'libx264', '-crf', '20', '-preset', 'veryfast', '-c:a', 'aac', vsrc]);
+  const vinfo = await c.probe(vsrc); const vpl = c.plan(vinfo, 'low'); ok(vpl.ok, 'short plan ' + vpl.height + 'p ' + vpl.videoK + 'k');
+  const t0 = Date.now(); const vr = await Promise.race([c.run(vinfo, vpl, outDir).promise, new Promise((_, rej) => setTimeout(() => rej(new Error('hung')), 90000))]);
+  ok(vr.bytes < vinfo.bytes && vr.bytes / vpl.targetBytes < 1.1, 'short low done in ' + ((Date.now() - t0) / 1000).toFixed(1) + 's, x' + (vr.bytes / vpl.targetBytes).toFixed(2));
   const short = c.plan({ ...info, duration: 36000, bytes: info.bytes }, 'low'); ok(!short.ok && short.reason, 'infeasible plan rejected: ' + short.reason);
+  const tmpBefore = new Set(fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith('frameo-cmp-')));
   const job = c.run(info, c.plan(info, 'medium'), outDir); setTimeout(() => job.cancel(), 800);
   let cancelled = false; try { await job.promise; } catch (e) { cancelled = !!e.cancelled; }
-  ok(cancelled, 'cancel works'); ok(!fs.readdirSync(os.tmpdir()).some((n) => n.startsWith('frameo-cmp-')), 'temp dir cleaned');
+  ok(cancelled, 'cancel works'); ok(!fs.readdirSync(os.tmpdir()).some((n) => n.startsWith('frameo-cmp-') && !tmpBefore.has(n)), 'temp dir cleaned');
   ok(c.outputName('/x/Rec (medium).webm', 'low') === 'Rec (low).mp4', 'output name strips old suffix');
   fs.rmSync(dir, { recursive: true, force: true }); console.log('[compress] ALL PASS');
 })().catch((e) => { console.error('[compress] FAIL', e); process.exit(1); });
