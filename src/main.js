@@ -5,6 +5,7 @@ const os = require('os');
 const settings = require('./settings');
 const system = require('./system');
 const capture = require('./capture');
+const compress = require('./compress');
 
 app.setName('frameo');
 app.commandLine.appendSwitch('class', 'frameo');
@@ -20,7 +21,7 @@ const toPhys = (r) => { const f = screen.getPrimaryDisplay().scaleFactor || 1; r
 let mainWin = null, tray = null, toolbarWin = null, overlayWin = null, countdownWin = null;
 let env = { wayland: false, ffmpeg: true, helper: true, sinks: [], mics: [], defaultSink: '' };
 const rec = new capture.Recorder();
-let recBase = null, recTimer = null, recMode = 'toolbar', busy = false, overlayDone = null;
+let recBase = null, recTimer = null, recMode = 'toolbar', busy = false, overlayDone = null, compressJob = null;
 
 /* ---------------- windows ---------------- */
 function createMain() {
@@ -152,6 +153,7 @@ async function regionScreenshot() {
 async function startRecording(rectIn) {
   const b = blocked(); if (b) return { error: b };
   if (rec.active) return { error: 'busy' };
+  if (compressJob) return { error: 'compressing' };
   busy = true;
   const st = settings.load();
   try {
@@ -266,10 +268,43 @@ ipcMain.handle('item:delete', async (_e, p) => { try { await shell.trashItem(p);
 ipcMain.handle('item:reveal', (_e, p) => shell.showItemInFolder(p));
 ipcMain.handle('item:open', (_e, p) => shell.openPath(p));
 ipcMain.handle('item:copy', (_e, p) => { clipboard.writeImage(nativeImage.createFromPath(p)); return true; });
-ipcMain.handle('dir:choose', async () => {
-  const r = await dialog.showOpenDialog(mainWin, { properties: ['openDirectory', 'createDirectory'], defaultPath: settings.load().saveDir });
+ipcMain.handle('dir:choose', async (_e, start) => {
+  const r = await dialog.showOpenDialog(mainWin, { properties: ['openDirectory', 'createDirectory'], defaultPath: start || settings.load().saveDir });
   return r.canceled ? null : r.filePaths[0];
 });
+/* ---------------- compression ---------------- */
+ipcMain.handle('compress:pick', async () => {
+  const r = await dialog.showOpenDialog(mainWin, { properties: ['openFile'], filters: [{ name: 'Video', extensions: ['mp4', 'webm', 'mkv', 'mov', 'avi', 'm4v'] }] });
+  return r.canceled ? null : r.filePaths[0];
+});
+ipcMain.handle('compress:probe', async (_e, file) => {
+  try {
+    const info = await compress.probe(String(file));
+    const plans = {}; for (const k of Object.keys(compress.PRESETS)) { const p = compress.plan(info, k); plans[k] = p.ok ? { ok: true, estBytes: p.targetBytes, height: p.height, fps: Math.round(p.fps) } : { ok: false, reason: p.reason }; }
+    return { info: { path: info.file, name: path.basename(info.file), bytes: info.bytes, duration: info.duration, w: info.w, h: info.h, fps: Math.round(info.fps), hasAudio: info.hasAudio }, plans };
+  } catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('compress:start', async (_e, file, key, replaceOriginal) => {
+  if (rec.active) return { error: 'recording' };
+  if (compressJob) return { error: 'busy' };
+  let info, pl; const outDir = settings.load().compressDir;
+  try {
+    info = await compress.probe(String(file)); pl = compress.plan(info, key);
+    if (!pl.ok) return { error: 'plan', message: pl.reason };
+    compress.preflight(pl, outDir);
+  } catch (e) { return { error: e.code === 'ENOSPC' ? 'space' : 'plan', message: e.message }; }
+  const job = compress.run(info, pl, outDir, (p) => toMain('compress:progress', p));
+  compressJob = job;
+  job.promise.then(async (r) => {
+    let trashed = false;
+    if (replaceOriginal) { try { await shell.trashItem(info.file); trashed = true; } catch (e) { /* original stays */ } }
+    toMain('compress:done', { path: r.path, name: path.basename(r.path), bytes: r.bytes, origBytes: info.bytes, trashed });
+    notify('Compression finished', path.basename(r.path));
+  }).catch((e) => toMain('compress:done', e.cancelled ? { cancelled: true } : { error: 'failed', message: e.message }))
+    .finally(() => { compressJob = null; });
+  return { started: true };
+});
+ipcMain.handle('compress:cancel', () => { if (compressJob) compressJob.cancel(); });
 ipcMain.handle('win:min', () => mainWin && mainWin.minimize());
 ipcMain.handle('win:close', () => mainWin && mainWin.close());
 ipcMain.on('toolbar:pause', pauseResume);
