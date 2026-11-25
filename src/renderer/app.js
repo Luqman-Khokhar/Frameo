@@ -23,12 +23,13 @@ const P = {
   shield: '<path d="M10 2.8l6 2.2v4.7c0 3.6-2.5 6.1-6 7.5-3.5-1.4-6-3.9-6-7.5V5z"/><path d="M7.3 10l2 2 3.5-4"/>',
   warn: '<path d="M10 3.5l7 12.5H3z"/><path d="M10 8.5v3.2M10 13.6v.1"/>', info: '<circle cx="10" cy="10" r="7.5"/><path d="M10 9v4.5M10 6.5v.1"/>',
   copy: '<rect x="7" y="7" width="9" height="9" rx="1.6"/><path d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v6A1.5 1.5 0 0 0 5.5 13H7"/>',
-  swap: '<path d="M4 8h11l-3-3M16 12H5l3 3"/>'
+  swap: '<path d="M4 8h11l-3-3M16 12H5l3 3"/>',
+  shrink: '<path d="M4 8h4V4M16 8h-4V4M4 12h4v4M16 12h-4v4"/>'
 };
 const ico = (n, s = 17, extra = '') => `<svg viewBox="0 0 20 20" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${P[n]}</svg>`;
 
 const S = {
-  mode: 'shot', view: 'main', tab: 'general', busy: false, st: null, env: null, recents: [], preview: null, editKey: null,
+  mode: 'shot', view: 'main', tab: 'general', busy: false, st: null, env: null, recents: [], preview: null, cmp: null, editKey: null,
   banner: null, // {kind,title,body,cta}
   cfg: {
     shot: { src: 'full', lock: false, ratio: 16 / 9, size: { region: null, custom: { w: 1280, h: 720 } } },
@@ -88,9 +89,9 @@ function when(t) {
   return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ', ' + hm;
 }
 function recentHtml() {
-  const head = `<div class="rhead"><span class="sh">Recent</span>${S.recents.length ? `<button class="link" data-act="folder">${ico('folder', 14)}Open folder</button>` : ''}</div>`;
+  const head = `<div class="rhead"><span class="sh">Recent</span><span style="display:flex;gap:10px"><button class="link" data-act="cmp-pick">${ico('shrink', 14)}Compress a video…</button>${S.recents.length ? `<button class="link" data-act="folder">${ico('folder', 14)}Open folder</button>` : ''}</span></div>`;
   if (!S.recents.length) return `${head}<div class="empty"><svg viewBox="0 0 64 48" width="64" height="48" fill="none" aria-hidden="true"><path d="M8 16V9a3 3 0 0 1 3-3h7M46 6h7a3 3 0 0 1 3 3v7M56 32v7a3 3 0 0 1-3 3h-7M18 42h-7a3 3 0 0 1-3-3v-7" stroke="var(--text)" stroke-width="2.4" stroke-linecap="round"/><circle cx="32" cy="24" r="5" fill="#F2C46A"/></svg><b>Nothing captured yet</b><div class="sub" style="max-width:300px">Your screenshots and recordings will show up here. Try <span class="kbd">${keyText(S.st.keys.shotRegion)}</span> to grab a region without opening Frameo.</div></div>`;
-  return `${head}<div class="rlist">${S.recents.map((it, i) => `<div class="rrow"><button class="thumb" data-act="open-preview" data-i="${i}" aria-label="Open ${esc(it.name)}">${it.thumb ? `<img src="${it.thumb}" alt="">` : ''}${it.kind === 'rec' ? `<span class="play"><svg viewBox="0 0 20 20" width="8" height="8"><path d="M6 3.5l11 6.5-11 6.5z" fill="#FCF0DA"/></svg></span>` : ''}</button><div class="rmeta"><div class="n">${esc(it.name)}</div><div class="sub tn">${it.kind === 'rec' ? 'Recording · ' + fmtDur(it.dur) : 'Screenshot'} · ${when(it.mtime)}</div></div><div class="acts"><button class="ic" data-act="open-preview" data-i="${i}" aria-label="Open">${ico('open', 16)}</button><button class="ic" data-act="reveal" data-i="${i}" aria-label="Reveal in folder">${ico('folder', 16)}</button><button class="ic dng" data-act="del" data-i="${i}" aria-label="Move to Trash">${ico('trash', 16)}</button></div></div>`).join('')}</div>`;
+  return `${head}<div class="rlist">${S.recents.map((it, i) => `<div class="rrow"><button class="thumb" data-act="open-preview" data-i="${i}" aria-label="Open ${esc(it.name)}">${it.thumb ? `<img src="${it.thumb}" alt="">` : ''}${it.kind === 'rec' ? `<span class="play"><svg viewBox="0 0 20 20" width="8" height="8"><path d="M6 3.5l11 6.5-11 6.5z" fill="#FCF0DA"/></svg></span>` : ''}</button><div class="rmeta"><div class="n">${esc(it.name)}</div><div class="sub tn">${it.kind === 'rec' ? 'Recording · ' + fmtDur(it.dur) : 'Screenshot'} · ${when(it.mtime)}</div></div><div class="acts"><button class="ic" data-act="open-preview" data-i="${i}" aria-label="Open">${ico('open', 16)}</button>${it.kind === 'rec' ? `<button class="ic" data-act="cmp-row" data-i="${i}" aria-label="Compress">${ico('shrink', 16)}</button>` : ''}<button class="ic" data-act="reveal" data-i="${i}" aria-label="Reveal in folder">${ico('folder', 16)}</button><button class="ic dng" data-act="del" data-i="${i}" aria-label="Move to Trash">${ico('trash', 16)}</button></div></div>`).join('')}</div>`;
 }
 function mainHtml() {
   const m = S.mode, isRec = m === 'rec', { c, src, size } = cur(), k = S.st.keys, blocked = !!blockedReason();
@@ -122,6 +123,7 @@ function settingsHtml() {
   if (S.tab === 'capture') body = `
     <div class="grp"><span class="sh">Screenshots</span><div class="line"><span class="t">Format</span>${segs([['PNG', 'png'], ['JPG', 'jpg'], ['WebP', 'webp']], st.img, 'set', 'img')}</div>${defDims('shot', 'Independent from recording')}</div>
     <div class="grp"><span class="sh">Recordings</span><div class="line"><span class="t">Format</span>${segs([['MP4', 'mp4'], ['WebM', 'webm']], st.vid, 'set', 'vid')}</div><div class="line"><span class="t">Quality</span>${segs([['Low', 'Low'], ['Medium', 'Medium'], ['High', 'High']], st.quality, 'set', 'quality')}</div><div class="line"><span class="t">Frame rate</span>${segs([['24', 24], ['30', 30], ['60', 60]], st.fps, 'set', 'fps')}</div>${defDims('rec', 'Independent from screenshots')}</div>
+    <div class="grp"><span class="sh">Compression</span><div class="line"><div><div class="t">Save compressed videos to</div><div class="sub">Medium and Low copies go here</div></div><div class="row" style="min-width:0;max-width:260px"><div class="fld" style="flex:1"><span style="letter-spacing:0;font-weight:500;color:var(--text);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(st.compressDir)}</span></div><button class="ghost" data-act="choose-cmp-dir">Change…</button></div></div></div>
     <div class="grp" style="gap:10px"><span class="sh">This computer</span><div class="line"><span class="t">Capture engine</span><span class="sub">${S.env.wayland ? 'Not available on Wayland' : 'X11 grab + ffmpeg'}</span></div><div class="line"><span class="t">Frameo’s own windows</span><span class="sub" style="text-align:right;max-width:230px">Rebuilt from a clean snapshot; verified before every recording</span></div></div>`;
   if (S.tab === 'audio') {
     const list = (items, curName, k, none) => items.length ? items.map((d) => `<button class="opt ${(curName || '') === d.name || (!curName && items[0].name === d.name) ? 'on' : ''}" data-act="set" data-k="${k}" data-v="${esc(d.name)}"><span>${esc(d.description)}</span>${(curName || items[0].name) === d.name ? ico('check', 16) : ''}</button>`).join('') : `<div class="sub" style="padding:0 10px">${none}</div>`;
@@ -149,7 +151,7 @@ function render() {
   $('#view').innerHTML = S.view === 'main' ? mainHtml() : settingsHtml();
   $('#status').innerHTML = S.view === 'main' ? statusHtml() : '';
   $('[data-act="settings"]').innerHTML = ico('sliders', 18);
-  renderPreview(); syncMeters();
+  renderPreview(); renderCompress(); syncMeters();
 }
 /* ---------- preview ---------- */
 function renderPreview() {
@@ -158,7 +160,7 @@ function renderPreview() {
   el.innerHTML = `<div class="pv"><div class="pvh"><div class="n">${esc(it.name)}</div><button class="ic" data-act="pv-close" aria-label="Close preview">${ico('x', 16)}</button></div>
   <div class="pvm">${it.kind === 'rec' ? `<video src="${url}" controls preload="metadata"></video>` : `<img src="${url}" alt="">`}</div>
   <div class="pvi sub"><span class="tn">${it.kind === 'rec' ? 'Recording · ' + fmtDur(it.dur) : 'Screenshot'} · ${fmtSize(it.bytes)}</span><span>${ico('shield', 14)}Frameo’s controls aren’t in this capture</span></div>
-  <div class="pva"><button class="ghost dng" data-act="pv-del">${ico('trash', 15)}Delete</button><button class="ghost" data-act="pv-reveal">${ico('folder', 15)}Reveal in folder</button>${it.kind === 'shot' ? `<button class="ghost" data-act="pv-copy">${ico('copy', 15)}Copy</button>` : `<button class="ghost" data-act="pv-open">${ico('open', 15)}Open in player</button>`}<span class="grow"></span><button class="solid" data-act="pv-close">Done</button></div></div>`;
+  <div class="pva"><button class="ghost dng" data-act="pv-del">${ico('trash', 15)}Delete</button><button class="ghost" data-act="pv-reveal">${ico('folder', 15)}Reveal in folder</button>${it.kind === 'shot' ? `<button class="ghost" data-act="pv-copy">${ico('copy', 15)}Copy</button>` : `<button class="ghost" data-act="pv-open">${ico('open', 15)}Open in player</button><button class="ghost" data-act="pv-cmp">${ico('shrink', 15)}Compress</button>`}<span class="grow"></span><button class="solid" data-act="pv-close">Done</button></div></div>`;
 }
 let toastT;
 function toast(msg) { const t = $('#toast'); t.innerHTML = `<svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="#F2C46A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg>${esc(msg)}`; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 2200); }
@@ -171,6 +173,7 @@ function handleResult(r, kind) {
   if (!r) return render();
   if (r.error === 'save') S.banner = { kind: 'err', title: 'Couldn’t save the capture', body: 'The folder is read-only or the disk is full. Choose another location and capture again.', cta: [{ act: 'fix-save', label: 'Choose folder' }, { act: 'dismiss', label: 'Dismiss' }] };
   else if (r.error === 'capture') S.banner = { kind: 'err', title: 'Capture failed', body: r.message || 'Something went wrong while capturing.', cta: [{ act: 'dismiss', label: 'Dismiss' }] };
+  else if (r.error === 'compressing') S.banner = { kind: 'info', title: 'Compression in progress', body: 'Wait for it to finish, or cancel it, before recording.', cta: [{ act: 'dismiss', label: 'Got it' }] };
   else if (r.mode === 'tray' && r.note) S.banner = { kind: 'info', title: 'Controls are in the tray', body: r.note, cta: [{ act: 'dismiss', label: 'Got it' }] };
   render();
 }
@@ -230,6 +233,17 @@ document.addEventListener('click', async (e) => {
     case 'pv-del': if (await api.del(S.preview.path)) { S.preview = null; await refreshRecents(); render(); toast('Moved to Trash'); } return;
     case 'fix-save': S.banner = null; S.view = 'settings'; S.tab = 'general'; return render();
     case 'dismiss': S.banner = null; return render();
+    case 'pv-cmp': return openCompress(S.preview.path, S.preview.fresh);
+    case 'cmp-row': return openCompress(it.path, false);
+    case 'cmp-pick': { const f = await api.cmpPick(); if (f) openCompress(f, false); return; }
+    case 'cmp-close': S.cmp = null; return renderCompress();
+    case 'cmp-go': return cmpStart();
+    case 'cmp-cancel': return api.cmpCancel();
+    case 'cmp-retry': S.cmp.state = S.cmp.info ? 'idle' : 'error'; if (!S.cmp.info) return openCompress(S.cmp.file, S.cmp.fresh); return renderCompress();
+    case 'cmp-dir': { const p = await api.chooseDir(S.st.compressDir); if (p) { await save({ compressDir: p }); renderCompress(); } return; }
+    case 'choose-cmp-dir': { const p = await api.chooseDir(S.st.compressDir); if (p) { await save({ compressDir: p }); render(); } return; }
+    case 'cmp-reveal': return api.reveal(S.cmp.result.path);
+    case 'cmp-open': return api.open(S.cmp.result.path);
     case 'min': return api.minimize();
     case 'close': return api.close();
     case 'key-edit': S.editKey = d.id; return render();
@@ -237,6 +251,7 @@ document.addEventListener('click', async (e) => {
   }
 });
 document.addEventListener('keydown', async (e) => {
+  if (e.key === 'Escape' && S.cmp && S.cmp.state !== 'running') { S.cmp = null; return renderCompress(); }
   if (e.key === 'Escape' && S.preview) { S.preview = null; return renderPreview(); }
   if (!S.editKey) return;
   e.preventDefault();
@@ -283,12 +298,89 @@ function syncMeters() {
   for (const r of rows) if (!meters.nodes[r.id]) startMeter(r.id, r.id === 'mic' ? (micDesc() && S.st.mic ? micDesc() : '') : 'Monitor of ' + sinkDesc(r.id === 'sys' ? S.env.defaultSink : sink));
 }
 
+/* ---------- compress ---------- */
+const VIDEO_RE = /\.(mp4|webm|mkv|mov|avi|m4v)$/i;
+const fmtEta = (s) => (s < 60 ? Math.max(1, Math.round(s)) + ' s left' : Math.floor(s / 60) + ' min ' + String(Math.round(s % 60)).padStart(2, '0') + ' s left');
+async function openCompress(file, fresh) {
+  if (S.cmp && S.cmp.state === 'running') return;
+  S.preview = null; renderPreview();
+  S.cmp = { file, fresh: !!fresh, state: 'probing', key: 'medium' }; renderCompress();
+  const r = await api.cmpProbe(file);
+  if (!S.cmp || S.cmp.file !== file) return;
+  if (r.error) { S.cmp.state = 'error'; S.cmp.message = r.error; return renderCompress(); }
+  S.cmp.info = r.info; S.cmp.plans = r.plans; S.cmp.state = 'idle';
+  S.cmp.key = r.plans.medium.ok ? 'medium' : r.plans.low.ok ? 'low' : 'original';
+  renderCompress(); const sel = $('#cmpSel'); if (sel) sel.focus();
+}
+async function cmpStart() {
+  const c = S.cmp; if (!c || c.state !== 'idle') return;
+  if (c.key === 'original') { S.cmp = null; return renderCompress(); }
+  const r = await api.cmpStart(c.file, c.key, c.fresh);
+  if (r.error) { c.state = 'error'; c.message = r.error === 'recording' ? 'Stop the recording first.' : r.error === 'busy' ? 'Another compression is running.' : r.message || 'Could not start.'; return renderCompress(); }
+  c.state = 'running'; c.pct = 0; c.pass = 1; c.retry = false; c.t0 = Date.now(); renderCompress();
+}
+function updateCmpProgress() {
+  const c = S.cmp; if (!c || c.state !== 'running') return;
+  const pct = Math.round((c.pct || 0) * 100), bar = $('#cmpBar');
+  if (bar) { bar.setAttribute('aria-valuenow', pct); bar.firstElementChild.style.width = pct + '%'; }
+  const t = $('#cmpTxt');
+  if (t) { const el = (Date.now() - c.t0) / 1000; t.textContent = (c.retry ? 'Fine-tuning size · ' : 'Pass ' + c.pass + ' of 2 · ') + pct + '%' + (c.pct > 0.04 ? ' · ' + fmtEta(el / c.pct * (1 - c.pct)) : ''); }
+}
+function cmpOption(c, id, label) {
+  if (id === 'original') return `<option value="original" ${c.key === id ? 'selected' : ''}>Original · ${fmtSize(c.info.bytes)}</option>`;
+  const p = c.plans[id];
+  return p.ok ? `<option value="${id}" ${c.key === id ? 'selected' : ''}>${label} · about ${fmtSize(p.estBytes)}</option>` : `<option value="${id}" disabled>${label} · unavailable</option>`;
+}
+function renderCompress() {
+  const el = $('#compress'), c = S.cmp; el.hidden = !c; if (!c) { el.innerHTML = ''; return; }
+  const name = c.info ? c.info.name : c.file.split('/').pop(), running = c.state === 'running';
+  let body = '';
+  if (c.state === 'probing') body = `<div class="cb"><div class="sub">Reading video…</div></div><div class="pva"><span class="grow"></span><button class="ghost" data-act="cmp-close">Cancel</button></div>`;
+  else if (c.state === 'error') body = `<div class="cb"><div class="banner err">${ico('warn', 18)}<div style="flex:1"><b>Couldn’t compress</b><p>${esc(c.message)}</p></div></div></div><div class="pva"><span class="grow"></span><button class="ghost" data-act="cmp-close">Close</button><button class="solid" data-act="cmp-retry">Try again</button></div>`;
+  else if (c.state === 'idle') {
+    const i = c.info, pl = c.plans[c.key], miss = [['medium', 'Medium'], ['low', 'Low']].filter(([k]) => !c.plans[k].ok).map(([k, l]) => `<div class="sub">${l}: ${esc(c.plans[k].reason)}</div>`).join('');
+    const note = c.key === 'original' ? 'Keeps the video exactly as it is.' : pl && pl.ok ? pl.height + 'p · ' + pl.fps + ' fps · final size lands close to this estimate' : '';
+    const orig = c.key === 'original' ? '' : c.fresh ? 'Your original recording moves to Trash after compressing.' : 'Your original is not changed. A copy is saved.';
+    body = `<div class="cb"><div class="sub tn">${fmtDur(Math.round(i.duration))} · ${i.w} × ${i.h} · ${i.fps} fps · ${fmtSize(i.bytes)}</div>
+      <label class="grp" style="gap:6px"><span class="sh">Quality</span><select id="cmpSel" class="cmps">${cmpOption(c, 'original')}${cmpOption(c, 'medium', 'Medium')}${cmpOption(c, 'low', 'Low')}</select></label>
+      <div class="sub">${note}</div>${miss}
+      <div class="grp" style="gap:6px"><span class="sh">Save to</span><div class="row"><div class="fld" style="flex:1"><span style="letter-spacing:0;font-weight:500;color:var(--text);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(S.st.compressDir)}</span></div><button class="ghost" data-act="cmp-dir">Change…</button></div></div>
+      <div class="sub">${orig}</div></div>
+      <div class="pva"><span class="grow"></span><button class="ghost" data-act="cmp-close">Cancel</button><button class="solid" data-act="cmp-go">${c.key === 'original' ? 'Keep original' : 'Compress'}</button></div>`;
+  } else if (running) body = `<div class="cb"><div class="bar" id="cmpBar" role="progressbar" aria-label="Compression progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div><div class="sub tn" id="cmpTxt" aria-live="polite"></div></div><div class="pva"><span class="grow"></span><button class="ghost" data-act="cmp-cancel">Cancel</button></div>`;
+  else {
+    const r = c.result, saved = Math.max(0, Math.round((1 - r.bytes / r.origBytes) * 100));
+    body = `<div class="cb"><div class="row" style="gap:10px"><span style="color:var(--text)">${ico('check', 20)}</span><div><b>${esc(r.name)}</b><div class="sub tn">${fmtSize(r.bytes)} · ${saved}% smaller than ${fmtSize(r.origBytes)}</div></div></div><div class="sub">${r.trashed ? 'Original recording moved to Trash. ' : ''}Saved in ${esc(S.st.compressDir)}</div></div>
+      <div class="pva"><button class="ghost" data-act="cmp-reveal">${ico('folder', 15)}Reveal in folder</button><button class="ghost" data-act="cmp-open">${ico('open', 15)}Open in player</button><span class="grow"></span><button class="solid" data-act="cmp-close">Done</button></div>`;
+  }
+  el.innerHTML = `<div class="pv" role="dialog" aria-modal="true" aria-label="Compress video"><div class="pvh"><div class="n">${esc(name)}</div><button class="ic" data-act="cmp-close" aria-label="Close" ${running ? 'disabled' : ''}>${ico('x', 16)}</button></div>${body}</div>`;
+  if (running) updateCmpProgress();
+}
+document.addEventListener('change', (e) => { if (e.target.id === 'cmpSel' && S.cmp) { S.cmp.key = e.target.value; renderCompress(); const s = $('#cmpSel'); if (s) s.focus(); } });
+
 /* ---------- boot ---------- */
 (async function init() {
   const s = await api.state(); S.st = s.settings; S.env = s.env;
   S.cfg.shot.size.custom = { ...S.st.shot }; S.cfg.rec.size.custom = { ...S.st.rec };
   await refreshRecents(); render();
-  api.on('captured', async (item) => { S.busy = false; S.banner = null; S.view = 'main'; await refreshRecents(); S.preview = S.recents.find((r) => r.path === item.path) || item; render(); });
+  api.on('captured', async (item) => { S.busy = false; S.banner = null; S.view = 'main'; await refreshRecents(); const found = S.recents.find((r) => r.path === item.path) || item; S.preview = item.kind === 'rec' ? { ...found, fresh: true } : found; render(); });
   api.on('capture-error', (r) => handleResult(r));
+  api.on('compress:progress', (p) => { if (!S.cmp || S.cmp.state !== 'running') return; S.cmp.pct = p.pct; S.cmp.pass = p.pass; S.cmp.retry = p.retry; updateCmpProgress(); });
+  api.on('compress:done', async (r) => {
+    const c = S.cmp; if (!c) return;
+    if (r.cancelled) { c.state = 'idle'; return renderCompress(); }
+    if (r.error) { c.state = 'error'; c.message = r.message || 'Compression failed.'; return renderCompress(); }
+    c.state = 'done'; c.result = r; await refreshRecents(); render();
+  });
+  let dragDepth = 0;
+  document.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; document.body.classList.add('drop'); });
+  document.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('drop'); } });
+  document.addEventListener('dragover', (e) => e.preventDefault());
+  document.addEventListener('drop', (e) => {
+    e.preventDefault(); dragDepth = 0; document.body.classList.remove('drop');
+    const f = e.dataTransfer.files[0]; if (!f) return;
+    const p = api.pathFor(f); if (!VIDEO_RE.test(p)) return toast('That is not a video file');
+    openCompress(p, false);
+  });
   document.addEventListener('visibilitychange', async () => { if (!document.hidden) { S.env = (await api.state()).env; await refreshRecents(); render(); } });
 })();

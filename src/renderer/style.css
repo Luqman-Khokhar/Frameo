@@ -86,7 +86,7 @@ button:focus-visible,.fld:focus-within{outline:2px solid var(--focus);outline-of
 input[type=range]{accent-color:var(--text);width:140px}
 .opt{display:flex;align-items:center;gap:10px;height:38px;padding:0 10px;border-radius:8px;width:100%;text-align:left}
 .opt:hover{background:var(--hover)}.opt.on{background:var(--oliveSoft)}.opt span{flex:1;font-weight:500}
-#preview{position:fixed;inset:0;background:rgba(34,35,30,.45);display:grid;place-items:center;padding:14px}
+#preview,#compress{position:fixed;inset:0;background:rgba(34,35,30,.45);display:grid;place-items:center;padding:14px}
 .pv{width:100%;background:var(--bg);border-radius:14px;box-shadow:0 0 0 1px var(--line);overflow:hidden;display:flex;flex-direction:column;max-height:100%}
 .pvh{height:52px;display:flex;align-items:center;gap:10px;padding:0 10px 0 16px;flex:none}.pvh .n{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pvm{background:var(--track);padding:14px;display:grid;place-items:center;min-height:0;flex:1}
@@ -96,3 +96,11 @@ input[type=range]{accent-color:var(--text);width:140px}
 [hidden]{display:none!important}
 #toast{position:fixed;left:50%;bottom:48px;transform:translateX(-50%);height:36px;padding:0 16px;border-radius:18px;background:#3A3C36;color:#FCF0DA;font-weight:500;display:flex;align-items:center;gap:8px;pointer-events:none;white-space:nowrap}
 .cap{display:inline-flex;margin-left:6px}
+.cb{padding:4px 16px 0;display:flex;flex-direction:column;gap:14px}
+.cmps{height:38px;width:100%;border:0;border-radius:8px;background:var(--surface);color:var(--text);box-shadow:inset 0 0 0 1px var(--line);padding:0 10px;font:inherit;font-weight:500}
+.cmps:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.bar{height:8px;border-radius:4px;background:var(--track);overflow:hidden}
+.bar i{display:block;width:0;height:100%;border-radius:4px;background:#F2C46A;transition:width .3s}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+.ic[disabled]{opacity:.4;cursor:not-allowed}
+body.drop #app{outline:2px dashed var(--text);outline-offset:-8px}
