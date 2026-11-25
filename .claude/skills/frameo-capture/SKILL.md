@@ -11,6 +11,8 @@ description: Architecture and invariants of Frameo's capture pipeline (xcap help
 - Toolbar canary: pixel #3A3C37 near the toolbar's top-left. `toolbarVisible()` scans for it; if found before recording, toolbar closes and controls move to the tray. Never record with controls visible.
 - Env overrides `FRAMEO_TEST_PID` / `FRAMEO_TEST_CLASS` exist only for the negative-control test. Do not use otherwise.
 
+- Live ink: the overlay window titled `capture.KEEP_TITLE` ("Frameo ink overlay", src/live.js) is passed to xcap via `--keep-title`, so it is NOT excluded and is redrawn over repaired areas (toolbar/palette stay excluded). Never give another Frameo window that title.
+
 # Invariants
 - Clean base snapshot is taken BEFORE any Frameo window is shown.
 - Wayland: block capture, show banner.

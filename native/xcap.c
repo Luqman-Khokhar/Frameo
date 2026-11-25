@@ -13,7 +13,7 @@
  *      in stacking order. The toolbar's pixels are never copied to the output.
  *
  * Usage:
- *   xcap --pid N [--class frameo] [--region x,y,w,h] [--base file]
+ *   xcap --pid N [--class frameo] [--keep-title STR] [--region x,y,w,h] [--base file]
  *        [--save-base file] (--once out.raw | --stream [--fps F])
  */
 #define _GNU_SOURCE
@@ -32,8 +32,8 @@
 #define MARGIN 24
 
 typedef struct { int x, y, w, h; } Rect;
-typedef struct { Window id; Rect r; int excl; int managed; } Win;
-typedef struct { Window id; int excl; int managed; long frame; } Cache;
+typedef struct { Window id; Rect r; int excl; int managed; int keep; } Win;
+typedef struct { Window id; int excl; int managed; int keep; long frame; } Cache;
 
 static volatile sig_atomic_t stop_flag = 0;
 static void on_sig(int s) { (void)s; stop_flag = 1; }
@@ -44,7 +44,8 @@ static Window root;
 static int scr_w, scr_h;
 static long excl_pid = -1;
 static const char *excl_class = "frameo";
-static Atom a_pid, a_wmstate;
+static Atom a_pid, a_wmstate, a_name, a_utf8;
+static const char *keep_title = NULL; /* windows whose title contains this are NEVER excluded (live ink overlay) */
 static Cache cache[MAXWIN * 2];
 static int ncache = 0;
 static long frame_no = 0;
@@ -76,27 +77,41 @@ static int has_wmstate(Window w) {
   }
   return ok;
 }
+static int title_match(Window w) {
+  int m = 0; Atom t; int f; unsigned long n, after; unsigned char *d = NULL; char *nm = NULL;
+  if (XGetWindowProperty(dpy, w, a_name, 0, 64, False, a_utf8, &t, &f, &n, &after, &d) == Success && d) {
+    if (n && strstr((char *)d, keep_title)) m = 1;
+    XFree(d);
+  }
+  if (!m && XFetchName(dpy, w, &nm) && nm) { if (strstr(nm, keep_title)) m = 1; XFree(nm); }
+  return m;
+}
 /* A top-level window is Frameo's if it or one of its children (WM frame -> client) is. */
-static void classify(Window top, int *excl, int *managed) {
+static void classify(Window top, int *excl, int *managed, int *keepOut) {
   Window r, p, *ch = NULL; unsigned int n = 0, i;
+  int keep = 0;
   *excl = is_excl(top); *managed = has_wmstate(top);
+  if (keep_title && title_match(top)) keep = 1;
   if (XQueryTree(dpy, top, &r, &p, &ch, &n) && ch) {
     for (i = 0; i < n; i++) {
       if (!*excl && is_excl(ch[i])) *excl = 1;
       if (!*managed && has_wmstate(ch[i])) *managed = 1;
+      if (keep_title && !keep && title_match(ch[i])) keep = 1;
     }
     XFree(ch);
   }
+  if (keep) *excl = 0;
+  *keepOut = keep;
 }
 static Cache *cache_get(Window w) {
   int i;
   for (i = 0; i < ncache; i++) if (cache[i].id == w) {
-    if (frame_no - cache[i].frame > 30) { classify(w, &cache[i].excl, &cache[i].managed); cache[i].frame = frame_no; }
+    if (frame_no - cache[i].frame > 30) { classify(w, &cache[i].excl, &cache[i].managed, &cache[i].keep); cache[i].frame = frame_no; }
     return &cache[i];
   }
   if (ncache >= MAXWIN * 2) ncache = 0;
   cache[ncache].id = w; cache[ncache].frame = frame_no;
-  classify(w, &cache[ncache].excl, &cache[ncache].managed);
+  classify(w, &cache[ncache].excl, &cache[ncache].managed, &cache[ncache].keep);
   return &cache[ncache++];
 }
 static int list_windows(Win *out) {
@@ -110,7 +125,7 @@ static int list_windows(Win *out) {
     out[c].id = ch[i];
     out[c].r.x = at.x + at.border_width; out[c].r.y = at.y + at.border_width;
     out[c].r.w = at.width; out[c].r.h = at.height;
-    out[c].excl = k->excl; out[c].managed = k->managed;
+    out[c].excl = k->excl; out[c].managed = k->managed; out[c].keep = k->keep;
     c++;
   }
   XFree(ch);
@@ -147,7 +162,7 @@ static void repair(unsigned char *out, Rect region, Rect fix, const unsigned cha
   }
   for (i = 0; i < nw; i++) {
     Rect hit;
-    if (wins[i].excl || !wins[i].managed) continue;
+    if (wins[i].excl || (!wins[i].managed && !wins[i].keep)) continue; /* keep = live ink overlay, redrawn over repaired areas */
     if (!intersect(wins[i].r, fix, &hit)) continue;
     XImage *im = XGetImage(dpy, wins[i].id, hit.x - wins[i].r.x, hit.y - wins[i].r.y, hit.w, hit.h, AllPlanes, ZPixmap);
     if (!im) continue;
@@ -194,6 +209,7 @@ int main(int argc, char **argv) {
   for (i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "--pid") && i + 1 < argc) excl_pid = atol(argv[++i]);
     else if (!strcmp(argv[i], "--class") && i + 1 < argc) excl_class = argv[++i];
+    else if (!strcmp(argv[i], "--keep-title") && i + 1 < argc) keep_title = argv[++i];
     else if (!strcmp(argv[i], "--region") && i + 1 < argc) { have_region = sscanf(argv[++i], "%d,%d,%d,%d", &region.x, &region.y, &region.w, &region.h) == 4; }
     else if (!strcmp(argv[i], "--base") && i + 1 < argc) base_path = argv[++i];
     else if (!strcmp(argv[i], "--save-base") && i + 1 < argc) save_base = argv[++i];
@@ -208,6 +224,7 @@ int main(int argc, char **argv) {
   root = DefaultRootWindow(dpy);
   scr_w = DisplayWidth(dpy, DefaultScreen(dpy)); scr_h = DisplayHeight(dpy, DefaultScreen(dpy));
   a_pid = XInternAtom(dpy, "_NET_WM_PID", False); a_wmstate = XInternAtom(dpy, "WM_STATE", False);
+  a_name = XInternAtom(dpy, "_NET_WM_NAME", False); a_utf8 = XInternAtom(dpy, "UTF8_STRING", False);
   if (!have_region) { region.x = 0; region.y = 0; region.w = scr_w; region.h = scr_h; }
   { Rect screen = { 0, 0, scr_w, scr_h }, c; if (!intersect(region, screen, &c)) { fprintf(stderr, "xcap: region outside screen\n"); return 2; } region = c; }
   region.w &= ~1; region.h &= ~1; if (region.w < 2 || region.h < 2) { fprintf(stderr, "xcap: region too small\n"); return 2; }

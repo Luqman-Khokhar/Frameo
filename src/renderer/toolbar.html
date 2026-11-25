@@ -2,7 +2,7 @@
 <html><head><meta charset="utf-8"><title>Frameo toolbar</title>
 <style>
 html,body{margin:0;background:transparent;overflow:hidden;font-family:Inter,'Ubuntu',system-ui,sans-serif;user-select:none}
-.bar{position:relative;width:236px;height:44px;box-sizing:border-box;border-radius:22px;background:#3A3C36;color:#FCF0DA;border:1px solid rgba(252,240,218,.16);display:flex;align-items:center;padding:0 3px 0 1px}
+.bar{position:relative;width:272px;height:44px;flex:none;box-sizing:border-box;border-radius:22px;background:#3A3C36;color:#FCF0DA;border:1px solid rgba(252,240,218,.16);display:flex;align-items:center;padding:0 8px}
 .grip{width:24px;height:42px;display:grid;place-items:center;color:rgba(252,240,218,.55);cursor:grab;touch-action:none}
 .mid{flex:1;display:flex;align-items:center;gap:8px;padding-left:2px;cursor:grab;touch-action:none}
 .dot{width:10px;height:10px;border-radius:50%;background:#F2C46A;animation:p 1.6s ease-in-out infinite}
@@ -17,15 +17,31 @@ button:focus-visible{outline:2px solid #F2C46A;outline-offset:1px}
 #stop{background:#F2C46A;color:#3A3B36;margin-left:2px}
 #stop:hover{background:#EEB958}
 /* Invisible canary: 1 unit off the toolbar background. Frameo checks that this exact pixel never shows up in a captured frame. */
+.wrap{display:flex;flex-direction:column;gap:6px}.wrap.up{flex-direction:column-reverse}
+#ink[aria-pressed=true]{background:rgba(242,196,106,.25);color:#F2C46A}
+.panel{width:272px;height:88px;box-sizing:border-box;border-radius:16px;background:#3A3C36;color:#FCF0DA;border:1px solid rgba(252,240,218,.16);padding:8px;display:flex;flex-direction:column;gap:6px}
+.panel[hidden]{display:none}
+.pr{display:flex;align-items:center;justify-content:space-between;height:32px}
+.pr>span{display:flex;align-items:center;gap:2px}
+.panel .pb{width:28px;height:28px;border-radius:8px;display:grid;place-items:center}
+.panel .pb.on{background:rgba(252,240,218,.22)}
+.panel .pb:disabled{opacity:.4}
+.panel .cd{width:20px;height:20px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(252,240,218,.35);margin:0 2px}
+.panel .cd[aria-pressed=true]{outline:2px solid #F2C46A;outline-offset:2px}
+.panel .wd i{display:block;width:14px;height:var(--s);border-radius:99px;background:currentColor}
 .canary{position:absolute;left:117px;top:2px;width:4px;height:4px;background:#3A3C37}
 </style></head>
 <body>
+<div class="wrap" id="wrap">
 <div class="bar">
   <div class="grip" aria-hidden="true"><svg viewBox="0 0 12 18" width="10" height="16" fill="currentColor"><circle cx="3" cy="3" r="1.3"/><circle cx="9" cy="3" r="1.3"/><circle cx="3" cy="9" r="1.3"/><circle cx="9" cy="9" r="1.3"/><circle cx="3" cy="15" r="1.3"/><circle cx="9" cy="15" r="1.3"/></svg></div>
   <div class="mid"><span class="dot" id="dot"></span><span class="t" id="t">00:00</span><span class="lbl">PAUSED</span></div>
+  <button id="ink" aria-label="Draw on screen" aria-pressed="false" title="Draw on screen"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16l1-4 8.5-8.5a1.4 1.4 0 0 1 2 0l1 1a1.4 1.4 0 0 1 0 2L8 15z"/></svg></button>
   <button id="pause" aria-label="Pause recording"></button>
   <button id="stop" aria-label="Stop recording"><svg viewBox="0 0 20 20" width="16" height="16"><rect x="5" y="5" width="10" height="10" rx="2" fill="currentColor"/></svg></button>
   <div class="canary"></div>
+</div>
+<div class="panel" id="panel" hidden role="toolbar" aria-label="Drawing tools"></div>
 </div>
 <script>
 const PAUSE='<svg viewBox="0 0 20 20" width="18" height="18"><rect x="5" y="4.5" width="3.4" height="11" rx="1" fill="currentColor"/><rect x="11.6" y="4.5" width="3.4" height="11" rx="1" fill="currentColor"/></svg>';
@@ -37,6 +53,20 @@ bar.addEventListener('pointerdown',e=>{if(e.button!==0||e.target.closest('button
 bar.addEventListener('pointermove',e=>{if(dr)tb.move(dr.wx+e.screenX-dr.sx,dr.wy+e.screenY-dr.sy)});
 const endDrag=()=>{dr=null;document.body.style.cursor=''};
 bar.addEventListener('pointerup',endDrag);bar.addEventListener('pointercancel',endDrag);
+const I=d=>'<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+d+'</svg>';
+const TOOLS=[['pen','Pen','<path d="M4 16l1-4 8.5-8.5a1.4 1.4 0 0 1 2 0l1 1a1.4 1.4 0 0 1 0 2L8 15z"/>'],['line','Line','<path d="M4.5 15.5l11-11"/>'],['arrow','Arrow','<path d="M4.5 15.5l11-11M8.5 4.5h7v7"/>'],['rect','Rectangle','<rect x="4" y="5.5" width="12" height="9" rx="1"/>'],['ellipse','Ellipse','<ellipse cx="10" cy="10" rx="6.5" ry="5"/>'],['eraser','Eraser','<path d="M8 15.5h8M4.8 11.7l5.5-5.9a1.4 1.4 0 0 1 2 0l2.6 2.6a1.4 1.4 0 0 1 0 2L10.5 15.5H7.7z"/>']];
+const CMDS=[['undo','Undo','<path d="M7.5 5L4 8.5 7.5 12M4.5 8.5h7a4 4 0 0 1 0 8H9"/>'],['redo','Redo','<path d="M12.5 5L16 8.5 12.5 12M15.5 8.5h-7a4 4 0 0 0 0 8H11"/>'],['clear','Clear all','<path d="M4.5 6h11M8 6V4.5h4V6M6 6l.6 9.5h6.8L14 6"/>']];
+const COLORS=['#E5484D','#F2C46A','#46A758','#3E63DD','#8E4EC6','#FFFFFF'], WS=[[3,'Thin',2],[6,'Medium',4],[12,'Thick',7]];
+const ps={tool:'pen',color:COLORS[0],w:6};
+const panel=document.getElementById('panel');
+panel.innerHTML='<div class="pr">'+TOOLS.map(([id,l,d])=>'<button class="pb" data-tool="'+id+'" aria-label="'+l+'" title="'+l+'" aria-pressed="false">'+I(d)+'</button>').join('')+CMDS.map(([id,l,d])=>'<button class="pb" data-cmd="'+id+'" aria-label="'+l+'" title="'+l+'">'+I(d)+'</button>').join('')+'</div><div class="pr"><span>'+COLORS.map(c=>'<button class="cd" data-col="'+c+'" style="background:'+c+'" aria-label="Color '+c+'" aria-pressed="false"></button>').join('')+'</span><span>'+WS.map(([n,l,s])=>'<button class="pb wd" data-w="'+n+'" aria-label="'+l+'" title="'+l+'" aria-pressed="false"><i style="--s:'+s+'px"></i></button>').join('')+'</span></div>';
+function syncPanel(){panel.querySelectorAll('[data-tool]').forEach(b=>{const on=b.dataset.tool===ps.tool;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});panel.querySelectorAll('[data-col]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.col===ps.color));panel.querySelectorAll('[data-w]').forEach(b=>{const on=+b.dataset.w===ps.w;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)})}
+panel.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.tool){ps.tool=b.dataset.tool;tb.paint('tool',ps.tool)}else if(b.dataset.col){ps.color=b.dataset.col;tb.paint('color',ps.color)}else if(b.dataset.w){ps.w=+b.dataset.w;tb.paint('width',ps.w)}else if(b.dataset.cmd)tb.paint(b.dataset.cmd);
+  syncPanel()});
+syncPanel();
+document.getElementById('ink').onclick=()=>tb.ink();
+tb.onPaint(({open,up})=>{panel.hidden=!open;document.getElementById('wrap').classList.toggle('up',!!up);const k=document.getElementById('ink');k.setAttribute('aria-pressed',open)});
 pb.onclick=()=>tb.pause(); document.getElementById('stop').onclick=()=>tb.stop();
 const f=ms=>{const t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=t%60,p=n=>String(n).padStart(2,'0');return (h?h+':'+p(m):p(m))+':'+p(s)};
 tb.onTick(({ms,paused})=>{document.getElementById('t').textContent=f(ms);document.getElementById('dot').className='dot'+(paused?' paused':'');pb.innerHTML=paused?PLAY:PAUSE;pb.setAttribute('aria-label',paused?'Resume recording':'Pause recording')});

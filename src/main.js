@@ -7,6 +7,7 @@ const system = require('./system');
 const capture = require('./capture');
 const compress = require('./compress');
 const editor = require('./editor');
+const live = require('./live');
 
 app.setName('frameo');
 app.commandLine.appendSwitch('class', 'frameo');
@@ -15,14 +16,14 @@ if (!app.requestSingleInstanceLock()) { app.quit(); }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const asset = (n) => path.join(__dirname, '..', 'assets', n);
 const R = (n) => path.join(__dirname, 'renderer', n);
-const TB = { w: 236, h: 44 };
+const TB = { w: 272, h: 44, ph: 88, gap: 6 }; // ph = live-drawing palette height, shown above/below the bar
 // On Linux/X11 Electron works in DIPs; physical pixels = DIPs × the display scale factor.
 const toPhys = (r) => { const f = screen.getPrimaryDisplay().scaleFactor || 1; return { x: Math.round(r.x * f), y: Math.round(r.y * f), width: Math.round(r.width * f), height: Math.round(r.height * f) }; };
 
 let mainWin = null, tray = null, toolbarWin = null, overlayWin = null, countdownWin = null;
 let env = { wayland: false, ffmpeg: true, helper: true, sinks: [], mics: [], defaultSink: '' };
 const rec = new capture.Recorder();
-let recBase = null, recTimer = null, recMode = 'toolbar', busy = false, overlayDone = null, compressJob = null;
+let recBase = null, recTimer = null, recMode = 'toolbar', busy = false, overlayDone = null, compressJob = null, paintOpen = false, paintUp = false;
 
 /* ---------------- windows ---------------- */
 function createMain() {
@@ -52,7 +53,17 @@ function createToolbar() {
   toolbarWin.loadFile(R('toolbar.html'));
   return new Promise((res) => toolbarWin.webContents.once('did-finish-load', () => { toolbarWin.showInactive(); res(); }));
 }
-function closeToolbar() { if (toolbarWin && !toolbarWin.isDestroyed()) toolbarWin.destroy(); toolbarWin = null; }
+function closeToolbar() { live.destroy(); paintOpen = false; if (toolbarWin && !toolbarWin.isDestroyed()) toolbarWin.destroy(); toolbarWin = null; }
+/* Live drawing while recording: toolbar pencil / shortcut opens the palette and lets the user draw on screen; off keeps the ink visible but click-through. */
+async function paintToggle() {
+  if (!rec.active || recMode !== 'toolbar' || !toolbarWin || toolbarWin.isDestroyed()) return;
+  const b = toolbarWin.getBounds(), extra = TB.ph + TB.gap;
+  if (!paintOpen) { paintOpen = true; const d = screen.getDisplayMatching(b).bounds; paintUp = b.y + TB.h / 2 > d.y + d.height / 2; toolbarWin.setBounds({ x: b.x, y: paintUp ? b.y - extra : b.y, width: TB.w, height: TB.h + extra }); }
+  else { paintOpen = false; toolbarWin.setBounds({ x: b.x, y: paintUp ? b.y + extra : b.y, width: TB.w, height: TB.h }); }
+  toolbarWin.webContents.send('paint', { open: paintOpen, up: paintUp });
+  await live.setDraw(paintOpen);
+  if (toolbarWin && !toolbarWin.isDestroyed()) live.cutout(toolbarWin.getBounds()); // the WM keeps the overlay above the toolbar, so punch the toolbar's rect out of the overlay: it stays clickable while drawing
+}
 
 async function countdown(n) {
   const d = screen.getPrimaryDisplay().bounds;
@@ -168,7 +179,7 @@ async function startRecording(rectIn) {
     const g = await capture.snapshotBase({ rect, baseFile: recBase, out: raw }); // all Frameo windows are hidden here
     fs.rm(raw, () => {});
     // Show the toolbar, then prove it is absent from a captured frame before recording anything.
-    recMode = 'toolbar'; let note = '';
+    recMode = 'toolbar'; paintOpen = false; let note = '';
     await createToolbar(); await sleep(500);
     const phys = toPhys(toolbarWin.getBounds());
     const visible = await capture.toolbarVisible({ bounds: { x: phys.x, y: phys.y }, base: recBase });
@@ -232,6 +243,7 @@ function registerKeys() {
   reg(k.shotRegion, regionScreenshot, 'shotRegion');
   reg(k.rec, () => (rec.active ? stopRecording() : startRecording(null)), 'rec');
   reg(k.pause, pauseResume, 'pause');
+  reg(k.paint, paintToggle, 'paint');
   return failed;
 }
 function setAutostart(on) {
@@ -319,7 +331,12 @@ ipcMain.handle('win:min', () => mainWin && mainWin.minimize());
 ipcMain.handle('win:close', () => mainWin && mainWin.close());
 ipcMain.on('toolbar:pause', pauseResume);
 ipcMain.on('toolbar:stop', stopRecording);
-ipcMain.on('toolbar:move', (_e, x, y) => { if (toolbarWin && !toolbarWin.isDestroyed()) toolbarWin.setBounds({ x: Math.round(x), y: Math.round(y), width: TB.w, height: TB.h }); });
+ipcMain.on('toolbar:move', (_e, x, y) => { if (toolbarWin && !toolbarWin.isDestroyed()) { toolbarWin.setBounds({ x: Math.round(x), y: Math.round(y), width: TB.w, height: paintOpen ? TB.h + TB.ph + TB.gap : TB.h }); live.cutout(toolbarWin.getBounds()); } });
+ipcMain.on('paint:toggle', (e) => { if (toolbarWin && e.sender === toolbarWin.webContents) paintToggle(); });
+ipcMain.on('paint:cmd', (e, c, a) => {
+  if (!toolbarWin || e.sender !== toolbarWin.webContents || !paintOpen) return;
+  if (c === 'tool' || c === 'color' || c === 'width' || c === 'undo' || c === 'redo' || c === 'clear') live.send(c, a);
+});
 
 /* ---------------- lifecycle ---------------- */
 app.on('second-instance', showMain);
