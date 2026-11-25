@@ -24,7 +24,8 @@ const P = {
   warn: '<path d="M10 3.5l7 12.5H3z"/><path d="M10 8.5v3.2M10 13.6v.1"/>', info: '<circle cx="10" cy="10" r="7.5"/><path d="M10 9v4.5M10 6.5v.1"/>',
   copy: '<rect x="7" y="7" width="9" height="9" rx="1.6"/><path d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v6A1.5 1.5 0 0 0 5.5 13H7"/>',
   swap: '<path d="M4 8h11l-3-3M16 12H5l3 3"/>',
-  shrink: '<path d="M4 8h4V4M16 8h-4V4M4 12h4v4M16 12h-4v4"/>'
+  shrink: '<path d="M4 8h4V4M16 8h-4V4M4 12h4v4M16 12h-4v4"/>',
+  edit: '<path d="M4 16l1-4 8.5-8.5a1.4 1.4 0 0 1 2 0l1 1a1.4 1.4 0 0 1 0 2L8 15z"/>'
 };
 const ico = (n, s = 17, extra = '') => `<svg viewBox="0 0 20 20" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${P[n]}</svg>`;
 
@@ -121,7 +122,7 @@ function settingsHtml() {
     <div class="grp"><span class="sh">Startup</span>${tog('Launch at login', 'Start Frameo quietly when you sign in', 'launch')}${tog('Keep in tray when closed', 'Shortcuts keep working in the background', 'tray')}</div>
     <div class="grp"><span class="sh">Capture overlay</span><div class="line"><div><div class="t">Screen dimming</div><div class="sub">How dark the screen gets while selecting</div></div><input type="range" min="10" max="70" value="${st.dim}" data-range="dim" aria-label="Screen dimming"></div>${tog('Show size badge', 'Live width × height while selecting', 'badge')}${tog('Show ratio presets', '16:9, 4:3, 1:1 and 9:16 shortcuts', 'ratios')}<div class="line"><div><div class="t">Recording countdown</div><div class="sub">Before a recording begins</div></div>${segs([['Off', 0], ['3 s', 3], ['5 s', 5]], st.cd, 'set', 'cd')}</div></div>`;
   if (S.tab === 'capture') body = `
-    <div class="grp"><span class="sh">Screenshots</span><div class="line"><span class="t">Format</span>${segs([['PNG', 'png'], ['JPG', 'jpg'], ['WebP', 'webp']], st.img, 'set', 'img')}</div>${defDims('shot', 'Independent from recording')}</div>
+    <div class="grp"><span class="sh">Screenshots</span><div class="line"><span class="t">Format</span>${segs([['PNG', 'png'], ['JPG', 'jpg'], ['WebP', 'webp']], st.img, 'set', 'img')}</div>${tog('Annotate after capture', 'Open the editor right after a screenshot', 'editAfterShot')}${defDims('shot', 'Independent from recording')}</div>
     <div class="grp"><span class="sh">Recordings</span><div class="line"><span class="t">Format</span>${segs([['MP4', 'mp4'], ['WebM', 'webm']], st.vid, 'set', 'vid')}</div><div class="line"><span class="t">Quality</span>${segs([['Low', 'Low'], ['Medium', 'Medium'], ['High', 'High']], st.quality, 'set', 'quality')}</div><div class="line"><span class="t">Frame rate</span>${segs([['24', 24], ['30', 30], ['60', 60]], st.fps, 'set', 'fps')}</div>${defDims('rec', 'Independent from screenshots')}</div>
     <div class="grp"><span class="sh">Compression</span><div class="line"><div><div class="t">Save compressed videos to</div><div class="sub">Medium and Low copies go here</div></div><div class="row" style="min-width:0;max-width:260px"><div class="fld" style="flex:1"><span style="letter-spacing:0;font-weight:500;color:var(--text);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(st.compressDir)}</span></div><button class="ghost" data-act="choose-cmp-dir">Change…</button></div></div></div>
     <div class="grp" style="gap:10px"><span class="sh">This computer</span><div class="line"><span class="t">Capture engine</span><span class="sub">${S.env.wayland ? 'Not available on Wayland' : 'X11 grab + ffmpeg'}</span></div><div class="line"><span class="t">Frameo’s own windows</span><span class="sub" style="text-align:right;max-width:230px">Rebuilt from a clean snapshot; verified before every recording</span></div></div>`;
@@ -132,7 +133,7 @@ function settingsHtml() {
     <div class="grp" style="gap:8px"><span class="sh">How audio is captured here</span><div class="sub" style="color:var(--text);opacity:.85">System audio and Speaker output read an output device’s monitor through PipeWire or PulseAudio. The microphone uses the device chosen above.</div></div>`;
   }
   if (S.tab === 'keys') {
-    const rows = [['shotFull', 'Capture full screen'], ['shotRegion', 'Capture region'], ['rec', 'Start / stop recording'], ['pause', 'Pause / resume']];
+    const rows = [['shotFull', 'Capture full screen'], ['shotRegion', 'Capture region'], ['rec', 'Start / stop recording'], ['pause', 'Pause / resume'], ['paint', 'Draw on screen while recording']];
     body = `<div class="grp" style="gap:8px"><span class="sh">Global shortcuts</span>${rows.map(([id, l]) => `<div class="line" style="min-height:40px"><span class="t">${l}</span><div class="row">${S.editKey === id ? `<span class="sub" style="color:var(--text)">Press new shortcut…</span><button class="ghost" data-act="key-cancel">Cancel</button>` : `<span style="display:flex;gap:4px">${st.keys[id].split('+').map((x) => `<span class="kbd">${x === 'Control' ? 'Ctrl' : x}</span>`).join('')}</span><button class="ghost" data-act="key-edit" data-id="${id}">Change</button>`}</div></div>`).join('')}<div class="sub" style="margin-top:6px" id="keyNote">Shortcuts work when Frameo is in the tray, including during a recording.</div></div>`;
   }
   return `<div class="settings"><div class="shead"><button class="ic" data-act="back" aria-label="Back">${ico('back', 18)}</button><span class="disp">Settings</span></div><div class="modes">${tabs.map(([id, l]) => `<button class="seg ${S.tab === id ? 'on' : ''}" data-act="tab" data-t="${id}">${l}</button>`).join('')}</div><div class="sbody">${body}</div></div>`;
@@ -160,7 +161,7 @@ function renderPreview() {
   el.innerHTML = `<div class="pv"><div class="pvh"><div class="n">${esc(it.name)}</div><button class="ic" data-act="pv-close" aria-label="Close preview">${ico('x', 16)}</button></div>
   <div class="pvm">${it.kind === 'rec' ? `<video src="${url}" controls preload="metadata"></video>` : `<img src="${url}" alt="">`}</div>
   <div class="pvi sub"><span class="tn">${it.kind === 'rec' ? 'Recording · ' + fmtDur(it.dur) : 'Screenshot'} · ${fmtSize(it.bytes)}</span><span>${ico('shield', 14)}Frameo’s controls aren’t in this capture</span></div>
-  <div class="pva"><button class="ghost dng" data-act="pv-del">${ico('trash', 15)}Delete</button><button class="ghost" data-act="pv-reveal">${ico('folder', 15)}Reveal in folder</button>${it.kind === 'shot' ? `<button class="ghost" data-act="pv-copy">${ico('copy', 15)}Copy</button>` : `<button class="ghost" data-act="pv-open">${ico('open', 15)}Open in player</button><button class="ghost" data-act="pv-cmp">${ico('shrink', 15)}Compress</button>`}<span class="grow"></span><button class="solid" data-act="pv-close">Done</button></div></div>`;
+  <div class="pva"><button class="ghost dng" data-act="pv-del">${ico('trash', 15)}Delete</button><button class="ghost" data-act="pv-reveal">${ico('folder', 15)}Reveal in folder</button>${it.kind === 'shot' ? `<button class="ghost" data-act="pv-edit">${ico('edit', 15)}Annotate</button><button class="ghost" data-act="pv-copy">${ico('copy', 15)}Copy</button>` : `<button class="ghost" data-act="pv-open">${ico('open', 15)}Open in player</button><button class="ghost" data-act="pv-cmp">${ico('shrink', 15)}Compress</button>`}<span class="grow"></span><button class="solid" data-act="pv-close">Done</button></div></div>`;
 }
 let toastT;
 function toast(msg) { const t = $('#toast'); t.innerHTML = `<svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="#F2C46A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg>${esc(msg)}`; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 2200); }
@@ -229,6 +230,7 @@ document.addEventListener('click', async (e) => {
     case 'pv-close': S.preview = null; return renderPreview();
     case 'pv-reveal': api.reveal(S.preview.path); return toast('Revealed in folder');
     case 'pv-open': return api.open(S.preview.path);
+    case 'pv-edit': { const r = await api.annotate(S.preview.path); if (r && r.error) toast(r.error === 'recording' ? 'Stop recording first' : 'Can’t open this file'); return; }
     case 'pv-copy': await api.copy(S.preview.path); return toast('Copied to clipboard');
     case 'pv-del': if (await api.del(S.preview.path)) { S.preview = null; await refreshRecents(); render(); toast('Moved to Trash'); } return;
     case 'fix-save': S.banner = null; S.view = 'settings'; S.tab = 'general'; return render();

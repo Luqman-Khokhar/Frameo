@@ -6,6 +6,8 @@ const settings = require('./settings');
 const system = require('./system');
 const capture = require('./capture');
 const compress = require('./compress');
+const editor = require('./editor');
+const live = require('./live');
 
 app.setName('frameo');
 app.commandLine.appendSwitch('class', 'frameo');
@@ -14,14 +16,14 @@ if (!app.requestSingleInstanceLock()) { app.quit(); }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const asset = (n) => path.join(__dirname, '..', 'assets', n);
 const R = (n) => path.join(__dirname, 'renderer', n);
-const TB = { w: 236, h: 44 };
+const TB = { w: 272, h: 44, ph: 88, gap: 6 }; // ph = live-drawing palette height, shown above/below the bar
 // On Linux/X11 Electron works in DIPs; physical pixels = DIPs × the display scale factor.
 const toPhys = (r) => { const f = screen.getPrimaryDisplay().scaleFactor || 1; return { x: Math.round(r.x * f), y: Math.round(r.y * f), width: Math.round(r.width * f), height: Math.round(r.height * f) }; };
 
 let mainWin = null, tray = null, toolbarWin = null, overlayWin = null, countdownWin = null;
 let env = { wayland: false, ffmpeg: true, helper: true, sinks: [], mics: [], defaultSink: '' };
 const rec = new capture.Recorder();
-let recBase = null, recTimer = null, recMode = 'toolbar', busy = false, overlayDone = null, compressJob = null;
+let recBase = null, recTimer = null, recMode = 'toolbar', busy = false, overlayDone = null, compressJob = null, paintOpen = false, paintUp = false;
 
 /* ---------------- windows ---------------- */
 function createMain() {
@@ -51,7 +53,17 @@ function createToolbar() {
   toolbarWin.loadFile(R('toolbar.html'));
   return new Promise((res) => toolbarWin.webContents.once('did-finish-load', () => { toolbarWin.showInactive(); res(); }));
 }
-function closeToolbar() { if (toolbarWin && !toolbarWin.isDestroyed()) toolbarWin.destroy(); toolbarWin = null; }
+function closeToolbar() { live.destroy(); paintOpen = false; if (toolbarWin && !toolbarWin.isDestroyed()) toolbarWin.destroy(); toolbarWin = null; }
+/* Live drawing while recording: toolbar pencil / shortcut opens the palette and lets the user draw on screen; off keeps the ink visible but click-through. */
+async function paintToggle() {
+  if (!rec.active || recMode !== 'toolbar' || !toolbarWin || toolbarWin.isDestroyed()) return;
+  const b = toolbarWin.getBounds(), extra = TB.ph + TB.gap;
+  if (!paintOpen) { paintOpen = true; const d = screen.getDisplayMatching(b).bounds; paintUp = b.y + TB.h / 2 > d.y + d.height / 2; toolbarWin.setBounds({ x: b.x, y: paintUp ? b.y - extra : b.y, width: TB.w, height: TB.h + extra }); }
+  else { paintOpen = false; toolbarWin.setBounds({ x: b.x, y: paintUp ? b.y + extra : b.y, width: TB.w, height: TB.h }); }
+  toolbarWin.webContents.send('paint', { open: paintOpen, up: paintUp });
+  await live.setDraw(paintOpen);
+  if (toolbarWin && !toolbarWin.isDestroyed()) live.setCut('toolbar', toolbarWin.getBounds()); // the WM keeps the overlay above the toolbar, so punch the toolbar's rect out of the overlay: it stays clickable while drawing
+}
 
 async function countdown(n) {
   const d = screen.getPrimaryDisplay().bounds;
@@ -128,17 +140,18 @@ async function doScreenshot(rect) {
   busy = true;
   const st = settings.load();
   const wasVisible = mainWin && mainWin.isVisible();
+  const edHid = !rec.active && editor.hide();
   try {
-    if (wasVisible && !rec.active) { mainWin.hide(); await sleep(450); } // let the WM finish fading our windows out
+    if ((wasVisible || edHid) && !rec.active) { if (wasVisible) mainWin.hide(); await sleep(450); } // let the WM finish fading our windows out
     fs.mkdirSync(st.saveDir, { recursive: true });
     const r = await capture.screenshot({ rect, dir: st.saveDir, fmt: st.img, base: rec.active ? recBase : null });
     const item = await itemFor(r.path);
-    if (!rec.active) { showMain(); toMain('captured', item); } else notify('Screenshot saved', item.name);
+    if (!rec.active) { showMain(); toMain('captured', item); if (st.editAfterShot) openEditor(item.path); } else notify('Screenshot saved', item.name);
     return { item };
   } catch (e) {
     if (!rec.active) showMain();
     const info = errInfo(e); toMain('capture-error', info); return info;
-  } finally { busy = false; }
+  } finally { busy = false; if (!rec.active) editor.restore(); }
 }
 
 async function regionScreenshot() {
@@ -158,14 +171,15 @@ async function startRecording(rectIn) {
   const st = settings.load();
   try {
     if (mainWin) mainWin.hide();
+    editor.hide();
     const rect = rectIn ? { ...rectIn } : null;
-    if (st.cd > 0) { const ok = await countdown(st.cd); if (!ok) { showMain(); return { cancelled: true }; } } else await sleep(450);
+    if (st.cd > 0) { const ok = await countdown(st.cd); if (!ok) { showMain(); editor.restore(); return { cancelled: true }; } } else await sleep(450);
     recBase = capture.tmp('base.raw');
     const raw = capture.tmp('first.raw');
     const g = await capture.snapshotBase({ rect, baseFile: recBase, out: raw }); // all Frameo windows are hidden here
     fs.rm(raw, () => {});
     // Show the toolbar, then prove it is absent from a captured frame before recording anything.
-    recMode = 'toolbar'; let note = '';
+    recMode = 'toolbar'; paintOpen = false; let note = '';
     await createToolbar(); await sleep(500);
     const phys = toPhys(toolbarWin.getBounds());
     const visible = await capture.toolbarVisible({ bounds: { x: phys.x, y: phys.y }, base: recBase });
@@ -178,7 +192,7 @@ async function startRecording(rectIn) {
     if (note) notify('Recording started', note);
     return { ok: true, mode: recMode, note, audio: audioSrcs.length };
   } catch (e) {
-    closeToolbar(); showMain(); const info = errInfo(e); toMain('capture-error', info); return info;
+    closeToolbar(); showMain(); editor.restore(); const info = errInfo(e); toMain('capture-error', info); return info;
   } finally { busy = false; }
 }
 async function pauseResume() {
@@ -194,8 +208,8 @@ async function stopRecording() {
     const r = await rec.stop();
     if (recBase) fs.rm(recBase, () => {}); recBase = null;
     const item = await itemFor(r.path);
-    showMain(); toMain('captured', item); return { item };
-  } catch (e) { showMain(); const info = errInfo(e); toMain('capture-error', info); return info; }
+    showMain(); editor.restore(); toMain('captured', item); return { item };
+  } catch (e) { showMain(); editor.restore(); const info = errInfo(e); toMain('capture-error', info); return info; }
 }
 
 /* ---------------- tray + shortcuts ---------------- */
@@ -229,6 +243,7 @@ function registerKeys() {
   reg(k.shotRegion, regionScreenshot, 'shotRegion');
   reg(k.rec, () => (rec.active ? stopRecording() : startRecording(null)), 'rec');
   reg(k.pause, pauseResume, 'pause');
+  reg(k.paint, paintToggle, 'paint');
   return failed;
 }
 function setAutostart(on) {
@@ -258,6 +273,13 @@ ipcMain.handle('region:pick', async (_e, init) => {
   if (!res) showMain(); // on success the caller captures right away, so the window stays hidden
   return res;
 });
+function openEditor(p) {
+  const f = path.resolve(String(p || ''));
+  if (rec.active) return { error: 'recording' };
+  if (path.dirname(f) !== path.resolve(settings.load().saveDir) || !/^Screenshot .*\.(png|jpg|webp)$/.test(path.basename(f))) return { error: 'file' };
+  return editor.open(f, async (out) => toMain('captured', await itemFor(out)));
+}
+ipcMain.handle('editor:open', (_e, p) => openEditor(p));
 ipcMain.handle('shot', (_e, rect) => doScreenshot(rect));
 ipcMain.handle('rec:start', (_e, rect) => startRecording(rect));
 ipcMain.handle('rec:pause', pauseResume);
@@ -309,7 +331,12 @@ ipcMain.handle('win:min', () => mainWin && mainWin.minimize());
 ipcMain.handle('win:close', () => mainWin && mainWin.close());
 ipcMain.on('toolbar:pause', pauseResume);
 ipcMain.on('toolbar:stop', stopRecording);
-ipcMain.on('toolbar:move', (_e, x, y) => { if (toolbarWin && !toolbarWin.isDestroyed()) toolbarWin.setBounds({ x: Math.round(x), y: Math.round(y), width: TB.w, height: TB.h }); });
+ipcMain.on('toolbar:move', (_e, x, y) => { if (toolbarWin && !toolbarWin.isDestroyed()) { toolbarWin.setBounds({ x: Math.round(x), y: Math.round(y), width: TB.w, height: paintOpen ? TB.h + TB.ph + TB.gap : TB.h }); live.setCut('toolbar', toolbarWin.getBounds()); } });
+ipcMain.on('paint:toggle', (e) => { if (toolbarWin && e.sender === toolbarWin.webContents) paintToggle(); });
+ipcMain.on('paint:cmd', (e, c, a) => {
+  if (!toolbarWin || e.sender !== toolbarWin.webContents || !paintOpen) return;
+  if (c === 'tool' && a === 'text') live.send(c, a); else if (c === 'tool' || c === 'color' || c === 'width' || c === 'undo' || c === 'redo' || c === 'clear') live.send(c, a);
+});
 
 /* ---------------- lifecycle ---------------- */
 app.on('second-instance', showMain);

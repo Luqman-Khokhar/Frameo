@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const { helperPath } = require('./system');
 
+const KEEP_TITLE = 'Frameo ink overlay'; // the live-drawing window: xcap must keep it in frames (see native/xcap.c --keep-title)
 const tmp = (n) => path.join(os.tmpdir(), 'frameo-' + process.pid + '-' + n);
 const pad = (n) => String(n).padStart(2, '0');
 function stamp() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`; }
@@ -20,7 +21,7 @@ function exec(cmd, args) {
 /* One raw frame via the helper. `base` is the clean snapshot taken before Frameo's windows were shown (recording only). */
 async function grabOnce({ rect, base, out, saveBase }) {
   const h = helperPath(); if (!h) throw new Error('Capture helper (xcap) is not built. Run: npm run build:native');
-  const args = ['--pid', process.env.FRAMEO_TEST_PID || String(process.pid), '--class', process.env.FRAMEO_TEST_CLASS || 'frameo']; // env overrides exist only for the negative-control test
+  const args = ['--pid', process.env.FRAMEO_TEST_PID || String(process.pid), '--class', process.env.FRAMEO_TEST_CLASS || 'frameo', '--keep-title', KEEP_TITLE]; // env overrides exist only for the negative-control test
   if (rect) args.push(...regionArg(rect));
   if (base) args.push('--base', base);
   if (saveBase) args.push('--save-base', saveBase);
@@ -76,7 +77,7 @@ class Recorder {
 
   startSegment() {
     const o = this.opts; const ext = o.vid; const file = tmp(`seg${this.segs.length}.${ext}`);
-    const helper = spawn(helperPath(), ['--pid', String(process.pid), '--class', 'frameo', ...regionArg(o.rect), '--base', o.base, '--stream', '--fps', String(o.fps)], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const helper = spawn(helperPath(), ['--pid', String(process.pid), '--class', 'frameo', '--keep-title', KEEP_TITLE, ...regionArg(o.rect), '--base', o.base, '--stream', '--fps', String(o.fps)], { stdio: ['ignore', 'pipe', 'pipe'] });
     const a = o.audioSrcs;
     const args = ['-y', '-loglevel', 'error', '-thread_queue_size', '512', '-use_wallclock_as_timestamps', '1', '-f', 'rawvideo', '-pix_fmt', 'bgr0', '-video_size', `${o.rect.w}x${o.rect.h}`, '-i', 'pipe:0'];
     for (const s of a) args.push('-thread_queue_size', '512', '-f', 'pulse', '-i', s);
@@ -126,4 +127,4 @@ class Recorder {
     return { path: out, ms };
   }
 }
-module.exports = { snapshotBase, screenshot, grabOnce, toolbarVisible, audioSources, Recorder, even, tmp };
+module.exports = { KEEP_TITLE, snapshotBase, screenshot, grabOnce, toolbarVisible, audioSources, Recorder, even, tmp };
