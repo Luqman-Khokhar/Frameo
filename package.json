@@ -1,0 +1,53 @@
+{
+  "name": "frameo",
+  "productName": "Frameo",
+  "version": "0.1.0",
+  "description": "Offline screenshot and screen-recording app. Its own controls never appear in captures.",
+  "main": "src/main.js",
+  "author": "Frameo",
+  "license": "MIT",
+  "scripts": {
+    "build:native": "make -C native",
+    "start": "npm run build:native && electron .",
+    "dist": "npm run build:native && electron-builder --linux deb AppImage"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "app.frameo.desktop",
+    "productName": "Frameo",
+    "linux": {
+      "target": [
+        "deb",
+        "AppImage"
+      ],
+      "category": "Utility",
+      "icon": "assets/icon.png",
+      "synopsis": "Screenshots and screen recording",
+      "desktop": {
+        "StartupWMClass": "frameo"
+      },
+      "executableName": "frameo"
+    },
+    "deb": {
+      "depends": [
+        "ffmpeg",
+        "pulseaudio-utils",
+        "libx11-6"
+      ]
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "native/xcap",
+        "to": "bin/xcap"
+      }
+    ]
+  }
+}
