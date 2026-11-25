@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Offline screenshot and screen-recording app. Its own controls never appear in captures.",
   "main": "src/main.js",
-  "author": "Frameo",
+  "author": { "name": "Luqman Khokhar", "email": "muhammadluqmang@gmail.com" },
   "license": "MIT",
   "scripts": {
     "build:native": "make -C native",
