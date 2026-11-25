@@ -1,0 +1,12 @@
+node_modules/
+dist/
+native/xcap
+*.log
+.DS_Store
+
+# personal Claude config - never commit
+.claude/skills/git-commit/
+.claude/skills/personal-*/
+.claude/settings.local.json
+.claude/task.md
+CLAUDE.local.md
