@@ -274,6 +274,7 @@ ipcMain.handle('win:min', () => mainWin && mainWin.minimize());
 ipcMain.handle('win:close', () => mainWin && mainWin.close());
 ipcMain.on('toolbar:pause', pauseResume);
 ipcMain.on('toolbar:stop', stopRecording);
+ipcMain.on('toolbar:move', (_e, x, y) => { if (toolbarWin && !toolbarWin.isDestroyed()) toolbarWin.setBounds({ x: Math.round(x), y: Math.round(y), width: TB.w, height: TB.h }); });
 
 /* ---------------- lifecycle ---------------- */
 app.on('second-instance', showMain);
