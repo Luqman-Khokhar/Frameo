@@ -76,6 +76,7 @@ function run(info, pl, outDir, onProgress = () => {}) {
   /* n = 1 or 2 for two-pass, 0 for a single-pass fallback */
   const pass = (n, vK, retry) => new Promise((resolve, reject) => {
     if (cancelled) return reject(Object.assign(new Error('Cancelled'), { cancelled: true }));
+    if (n === 2 && process.env.FRAMEO_TEST_FAIL_2PASS) return reject(new Error('Incomplete MB-tree stats file.')); // test hook only
     const args = ['-y', '-hide_banner', '-loglevel', 'error', '-nostdin', '-progress', 'pipe:1', '-nostats', '-i', info.file, '-map', '0:v:0', '-fps_mode', 'cfr', '-vf', pl.vf, // cfr in BOTH passes: mismatched frame counts make pass 2 hang
       '-c:v', 'libx264', '-preset', 'medium', '-b:v', vK + 'k', '-pix_fmt', 'yuv420p'];
     if (n) args.push('-pass', String(n), '-passlogfile', path.join(tmpDir, 'p'));
@@ -110,7 +111,7 @@ function run(info, pl, outDir, onProgress = () => {}) {
       let vK = pl.videoK;
       for (let attempt = 0; attempt < 2; attempt++) {
         try { await pass(1, vK, attempt > 0); await pass(2, vK, attempt > 0); }
-        catch (e) { if (!e.stalled) throw e; await pass(0, vK, true); } // two-pass stalled: fall back to single-pass
+        catch (e) { if (e.cancelled) throw e; await pass(0, vK, true); } // two-pass stalled or failed (e.g. "Incomplete MB-tree stats file"): fall back to single-pass
         const size = fs.statSync(out).size;
         if (size <= pl.targetBytes * 1.05 || attempt === 1) break;
         vK = Math.max(50, Math.floor(vK * pl.targetBytes / size * 0.96)); // came out too big: redo a little lower
