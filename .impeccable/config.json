@@ -11,6 +11,27 @@
         ],
         "createdAt": "2026-11-25T10:26:45.816Z",
         "reason": "assistant: dot tracks a live recording and stops pulsing when paused; domain-appropriate"
+      },
+      {
+        "rule": "overused-font",
+        "value": "space grotesk",
+        "createdAt": "2026-11-25T10:46:51.778Z",
+        "reason": "user confirmed: brand fonts"
+      },
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-11-25T10:46:51.784Z",
+        "reason": "user confirmed: brand fonts"
+      },
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          "src/renderer/index.html"
+        ],
+        "createdAt": "2026-11-25T10:46:51.790Z",
+        "reason": "user confirmed: cream/olive/amber/charcoal is the app identity"
       }
     ]
   }
