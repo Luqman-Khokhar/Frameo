@@ -7,7 +7,7 @@ const DEFAULTS = {
   saveDir: path.join(os.homedir(), 'Pictures', 'Frameo'),
   compressDir: path.join(os.homedir(), 'Downloads'),
   theme: 'light', img: 'png', vid: 'mp4', quality: 'High', fps: 30,
-  dim: 42, cd: 3, badge: true, ratios: true, launch: false, tray: true,
+  dim: 42, cd: 3, editAfterShot: false, badge: true, ratios: true, launch: false, tray: true,
   shot: { w: 1280, h: 720 }, rec: { w: 1280, h: 720 },
   audio: { sys: true, mic: false, spk: false },
   mic: '', sink: '',

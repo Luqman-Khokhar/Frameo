@@ -6,6 +6,7 @@ const settings = require('./settings');
 const system = require('./system');
 const capture = require('./capture');
 const compress = require('./compress');
+const editor = require('./editor');
 
 app.setName('frameo');
 app.commandLine.appendSwitch('class', 'frameo');
@@ -128,17 +129,18 @@ async function doScreenshot(rect) {
   busy = true;
   const st = settings.load();
   const wasVisible = mainWin && mainWin.isVisible();
+  const edHid = !rec.active && editor.hide();
   try {
-    if (wasVisible && !rec.active) { mainWin.hide(); await sleep(450); } // let the WM finish fading our windows out
+    if ((wasVisible || edHid) && !rec.active) { if (wasVisible) mainWin.hide(); await sleep(450); } // let the WM finish fading our windows out
     fs.mkdirSync(st.saveDir, { recursive: true });
     const r = await capture.screenshot({ rect, dir: st.saveDir, fmt: st.img, base: rec.active ? recBase : null });
     const item = await itemFor(r.path);
-    if (!rec.active) { showMain(); toMain('captured', item); } else notify('Screenshot saved', item.name);
+    if (!rec.active) { showMain(); toMain('captured', item); if (st.editAfterShot) openEditor(item.path); } else notify('Screenshot saved', item.name);
     return { item };
   } catch (e) {
     if (!rec.active) showMain();
     const info = errInfo(e); toMain('capture-error', info); return info;
-  } finally { busy = false; }
+  } finally { busy = false; if (!rec.active) editor.restore(); }
 }
 
 async function regionScreenshot() {
@@ -158,8 +160,9 @@ async function startRecording(rectIn) {
   const st = settings.load();
   try {
     if (mainWin) mainWin.hide();
+    editor.hide();
     const rect = rectIn ? { ...rectIn } : null;
-    if (st.cd > 0) { const ok = await countdown(st.cd); if (!ok) { showMain(); return { cancelled: true }; } } else await sleep(450);
+    if (st.cd > 0) { const ok = await countdown(st.cd); if (!ok) { showMain(); editor.restore(); return { cancelled: true }; } } else await sleep(450);
     recBase = capture.tmp('base.raw');
     const raw = capture.tmp('first.raw');
     const g = await capture.snapshotBase({ rect, baseFile: recBase, out: raw }); // all Frameo windows are hidden here
@@ -178,7 +181,7 @@ async function startRecording(rectIn) {
     if (note) notify('Recording started', note);
     return { ok: true, mode: recMode, note, audio: audioSrcs.length };
   } catch (e) {
-    closeToolbar(); showMain(); const info = errInfo(e); toMain('capture-error', info); return info;
+    closeToolbar(); showMain(); editor.restore(); const info = errInfo(e); toMain('capture-error', info); return info;
   } finally { busy = false; }
 }
 async function pauseResume() {
@@ -194,8 +197,8 @@ async function stopRecording() {
     const r = await rec.stop();
     if (recBase) fs.rm(recBase, () => {}); recBase = null;
     const item = await itemFor(r.path);
-    showMain(); toMain('captured', item); return { item };
-  } catch (e) { showMain(); const info = errInfo(e); toMain('capture-error', info); return info; }
+    showMain(); editor.restore(); toMain('captured', item); return { item };
+  } catch (e) { showMain(); editor.restore(); const info = errInfo(e); toMain('capture-error', info); return info; }
 }
 
 /* ---------------- tray + shortcuts ---------------- */
@@ -258,6 +261,13 @@ ipcMain.handle('region:pick', async (_e, init) => {
   if (!res) showMain(); // on success the caller captures right away, so the window stays hidden
   return res;
 });
+function openEditor(p) {
+  const f = path.resolve(String(p || ''));
+  if (rec.active) return { error: 'recording' };
+  if (path.dirname(f) !== path.resolve(settings.load().saveDir) || !/^Screenshot .*\.(png|jpg|webp)$/.test(path.basename(f))) return { error: 'file' };
+  return editor.open(f, async (out) => toMain('captured', await itemFor(out)));
+}
+ipcMain.handle('editor:open', (_e, p) => openEditor(p));
 ipcMain.handle('shot', (_e, rect) => doScreenshot(rect));
 ipcMain.handle('rec:start', (_e, rect) => startRecording(rect));
 ipcMain.handle('rec:pause', pauseResume);
