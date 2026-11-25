@@ -1,0 +1,20 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Frameo region</title>
+<link rel="stylesheet" href="overlay.css"></head>
+<body>
+<div id="dim"></div>
+<div id="hint">Drag anywhere to select an area</div>
+<div id="sel" hidden>
+  <i class="h" data-h="nw"></i><i class="h" data-h="n"></i><i class="h" data-h="ne"></i><i class="h" data-h="e"></i>
+  <i class="h" data-h="se"></i><i class="h" data-h="s"></i><i class="h" data-h="sw"></i><i class="h" data-h="w"></i>
+</div>
+<div id="badge" hidden></div>
+<div id="bar">
+  <span id="chips"></span><span class="sep" id="sep"></span>
+  <button id="lock" class="b"><svg id="lk" viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></svg>Lock ratio</button>
+  <span class="grow"></span>
+  <button id="cancel" class="b">Cancel <kbd>Esc</kbd></button>
+  <button id="ok" class="ok" disabled>Capture</button>
+</div>
+<script src="overlay.js"></script>
+</body></html>
