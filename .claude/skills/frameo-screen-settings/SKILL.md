@@ -11,7 +11,7 @@ Opened via titlebar settings button (`S.view='settings'`); back arrow returns. R
 Save location (path + "Change…" -> `dir:choose`), Theme light/dark, Launch at login (`launch`), Keep in tray (`tray`), Capture overlay: dimming range 10-70 (`dim`), size badge (`badge`), ratio presets (`ratios`), recording countdown Off/3/5 s (`cd`).
 
 ## Capture
-Screenshots: format png/jpg/webp (`img`), default custom size (`shot`). Recordings: format mp4/webm (`vid`), quality Low/Medium/High (`quality`), fps 24/30/60 (`fps`), default custom size (`rec`). Info lines: capture engine, own-window exclusion.
+Screenshots: format png/jpg/webp (`img`), default custom size (`shot`). Recordings: format mp4/webm (`vid`), quality Low/Medium/High (`quality`), fps 24/30/60 (`fps`), default custom size (`rec`). Info lines: capture engine, own-window exclusion. Compression group: output folder for compressed videos (`compressDir`).
 
 ## Audio
 Microphone device list (`mic`), speaker output device list (`sink`), explanation text. Lists come from `env.mics` / `env.sinks`; empty-state text when none.

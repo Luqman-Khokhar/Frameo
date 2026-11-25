@@ -9,6 +9,6 @@ description: Recent captures feature: listing, thumbnails, durations, open/revea
 
 `itemFor(file)` -> { path, name, kind (rec if name starts "Recording "), mtime, bytes, dur, thumb }. Screenshot thumb: nativeImage resize 112 px to data URL. Recording thumb: ffmpeg frame at 0.3 s scaled to 112 px cached in `userData/thumbs`; duration via ffprobe. Thumbnails are optional (errors swallowed).
 
-UI: rows with thumbnail button (opens preview), name, meta line ("Recording · mm:ss · Today, 3:04 PM" / "Screenshot · ..."), actions Open, Reveal, Delete. Header has "Open folder". Empty state suggests the region shortcut. Refreshed on capture, folder change, delete, and window becoming visible.
+UI: rows with thumbnail button (opens preview), name, meta line ("Recording · mm:ss · Today, 3:04 PM" / "Screenshot · ..."), actions Open, Reveal, Delete. Header has "Compress a video…" and "Open folder". Recording rows have a Compress action. Empty state suggests the region shortcut. Refreshed on capture, folder change, delete, and window becoming visible.
 
 IPC: `item:delete` (shell.trashItem, returns bool), `item:reveal`, `item:open`, `item:copy` (image to clipboard), `dir:choose`. File naming must stay "Screenshot ..." / "Recording ..." or items disappear from the list.

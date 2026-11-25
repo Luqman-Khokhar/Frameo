@@ -19,6 +19,9 @@ npm start
 npm run dist           # output in dist/
 sudo apt install ./dist/frameo_*.deb
 ```
+## Compress videos
+After a recording, or from "Compress a video…" (or by dropping a video onto the window), choose Original, Medium (about half the size) or Low (about a fifth). A copy named `… (medium).mp4` or `… (low).mp4` is saved to Downloads (changeable in Settings → Capture). A video you just recorded is replaced by the compressed one (the original goes to Trash); other videos are never changed.
+
 ## Default shortcuts
 Ctrl+Alt+1 full-screen shot · Ctrl+Alt+2 region shot · record start/stop and pause/resume are in Settings → Shortcuts (all changeable).
 
