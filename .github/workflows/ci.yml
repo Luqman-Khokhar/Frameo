@@ -1,0 +1,20 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: System packages
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg xvfb pulseaudio-utils build-essential libx11-dev libgbm1 libnss3 libasound2t64 libgtk-3-0t64
+      - run: npm ci
+      - run: npm run build:native
+      - run: npm test

@@ -122,19 +122,27 @@ function pickRegion(init) {
 ipcMain.handle('overlay:done', (e, res) => { if (overlayDone && overlayWin && !overlayWin.isDestroyed() && e.sender === overlayWin.webContents) overlayDone(res); });
 
 /* ---------------- items ---------------- */
+const videoMeta = new Map(); // path|mtime|size -> { thumb, dur }: a recording is probed once, not on every refresh
+const thumbsDir = () => path.join(app.getPath('userData'), 'thumbs');
+function sweepThumbs() { // drop cached thumbnails not touched for 30 days
+  try { for (const n of fs.readdirSync(thumbsDir())) { const p = path.join(thumbsDir(), n); if (Date.now() - fs.statSync(p).mtimeMs > 30 * 864e5) fs.rmSync(p, { force: true }); } } catch (e) { /* no cache yet */ }
+}
 async function itemFor(file) {
   const st = fs.statSync(file); const name = path.basename(file);
   const kind = /^Recording /.test(name) ? 'rec' : 'shot';
   const it = { path: file, name, kind, mtime: st.mtimeMs, bytes: st.size, dur: 0, thumb: '' };
+  const mk = file + '|' + st.mtimeMs + '|' + st.size;
+  if (kind === 'rec' && videoMeta.has(mk)) return { ...it, ...videoMeta.get(mk) };
   try {
     if (kind === 'shot') it.thumb = nativeImage.createFromPath(file).resize({ width: 112 }).toDataURL();
     else {
-      const dir = path.join(app.getPath('userData'), 'thumbs'); fs.mkdirSync(dir, { recursive: true });
-      const tp = path.join(dir, name.replace(/\.[^.]+$/, '') + '.png');
+      const dir = thumbsDir(); fs.mkdirSync(dir, { recursive: true });
+      const tp = path.join(dir, name.replace(/\.[^.]+$/, '') + '-' + Math.round(st.mtimeMs) + '.png'); // mtime in the name: a replaced file never shows an old thumbnail
       if (!fs.existsSync(tp)) await system.run('ffmpeg', ['-y', '-loglevel', 'error', '-ss', '0.3', '-i', file, '-frames:v', '1', '-vf', 'scale=112:-2', tp]);
       if (fs.existsSync(tp)) it.thumb = nativeImage.createFromPath(tp).toDataURL();
       const dur = await system.run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]);
       it.dur = Math.round(parseFloat(dur) || 0);
+      if (it.thumb && it.dur) videoMeta.set(mk, { thumb: it.thumb, dur: it.dur });
     }
   } catch (e) { /* thumbnail is optional */ }
   return it;
@@ -143,8 +151,9 @@ async function recents() {
   const dir = settings.load().saveDir;
   let names = [];
   try { names = fs.readdirSync(dir).filter((n) => /^(Screenshot|Recording) .*\.(png|jpg|webp|mp4|webm)$/.test(n)); } catch (e) { return []; }
-  const files = names.map((n) => path.join(dir, n)).map((p) => ({ p, t: fs.statSync(p).mtimeMs })).sort((a, b) => b.t - a.t).slice(0, 12);
-  return Promise.all(files.map((f) => itemFor(f.p)));
+  const stats = await Promise.all(names.map(async (n) => { const p = path.join(dir, n); try { return { p, t: (await fs.promises.stat(p)).mtimeMs }; } catch (e) { return null; } })); // a file can vanish between readdir and stat
+  const files = stats.filter(Boolean).sort((a, b) => b.t - a.t).slice(0, 12);
+  return (await Promise.all(files.map((f) => itemFor(f.p).catch(() => null)))).filter(Boolean);
 }
 
 /* ---------------- capture actions ---------------- */
@@ -273,7 +282,8 @@ function setAutostart(on) {
   if (!on) { fs.rmSync(f, { force: true }); return; }
   fs.mkdirSync(dir, { recursive: true });
   const exec = process.env.APPIMAGE || process.execPath;
-  fs.writeFileSync(f, `[Desktop Entry]\nType=Application\nName=Frameo\nExec="${exec}" --hidden\nX-GNOME-Autostart-enabled=true\nIcon=frameo\n`);
+  const target = !process.env.APPIMAGE && !app.isPackaged ? `"${exec}" "${app.getAppPath()}"` : `"${exec}"`; // dev: the bare electron binary needs the app path too
+  fs.writeFileSync(f, `[Desktop Entry]\nType=Application\nName=Frameo\nExec=${target} --hidden\nX-GNOME-Autostart-enabled=true\nIcon=frameo\n`);
 }
 
 /* ---------------- IPC ---------------- */
@@ -368,9 +378,11 @@ ipcMain.on('paint:cmd', (e, c, a) => {
 /* ---------------- lifecycle ---------------- */
 app.on('second-instance', showMain);
 app.whenReady().then(async () => {
-  session.defaultSession.setPermissionRequestHandler((_wc, perm, cb) => cb(perm === 'media'));
-  session.defaultSession.setPermissionCheckHandler((_wc, perm) => perm === 'media');
-  capture.sweepStaleTmp();
+  // Only the main window may use the microphone (live level meters, audio only); every other window and permission is denied.
+  const mainMic = (wc, perm, details) => perm === 'media' && !!mainWin && !mainWin.isDestroyed() && wc === mainWin.webContents && (!details || !details.mediaTypes || details.mediaTypes.every((t) => t === 'audio'));
+  session.defaultSession.setPermissionRequestHandler((wc, perm, cb, details) => cb(mainMic(wc, perm, details)));
+  session.defaultSession.setPermissionCheckHandler((wc, perm, _origin, details) => mainMic(wc, perm, details));
+  capture.sweepStaleTmp(); sweepThumbs();
   env = { ...env, ...(await system.probe()) };
   tray = new Tray(nativeImage.createFromPath(asset('tray.png')).resize({ width: 22, height: 22 }));
   tray.on('click', showMain); updateTray();
