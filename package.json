@@ -13,7 +13,8 @@
     "build:native": "make -C native",
     "start": "npm run build:native && electron .",
     "dist": "npm run build:native && electron-builder --linux deb AppImage",
-    "test": "bash test/run.sh"
+    "test": "bash test/run.sh",
+    "test:real": "electron --no-sandbox test/e2e-real.js --hidden"
   },
   "devDependencies": {
     "electron": "^45.5.0",

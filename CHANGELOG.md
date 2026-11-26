@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+- Recording: segments are written as fragmented mp4 (keyframe every 2 s, flushed to disk), so a crash or killed ffmpeg leaves a playable file missing at most the last ~2 s; stop remuxes to a normal faststart mp4.
+- `npm run test:real`: end-to-end check on a real X11 desktop (screenshots, recording with audio, toolbar exclusion, live ink, annotate editor).
+
 ## 0.3.0 (2026-11-26)
 - UI refinement: shared design tokens (accent, chrome, spacing, radii), yellow reserved for primary actions and the selected editor tool, consistent hover/pressed/disabled/focus states, thin themed scrollbars.
 - Main window: denser Recording view so Recent gets more room, one-line recent rows with a clickable name, shorter times, `~` in the save path.

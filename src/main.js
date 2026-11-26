@@ -399,4 +399,4 @@ app.on('before-quit', (e) => {
 });
 app.on('will-quit', () => { rec.kill(); globalShortcut.unregisterAll(); if (recBase) fs.rmSync(recBase, { force: true }); capture.cleanupTmp(); });
 
-module.exports = { itemPath, videoPath, doScreenshot, startRecording, pauseResume, stopRecording, regionScreenshot, rec, getMain: () => mainWin, getToolbar: () => toolbarWin, getMode: () => recMode };
+module.exports = { paintToggle, itemPath, videoPath, doScreenshot, startRecording, pauseResume, stopRecording, regionScreenshot, rec, getMain: () => mainWin, getToolbar: () => toolbarWin, getMode: () => recMode };

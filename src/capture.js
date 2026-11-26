@@ -105,7 +105,7 @@ class Recorder extends EventEmitter {
     args.push('-vf', `fps=${o.fps},scale=trunc(iw/2)*2:trunc(ih/2)*2`);
     const crf = { Low: 28, Medium: 23, High: 19 }[o.quality] || 23;
     if (ext === 'webm') args.push('-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', String(crf + 10), '-deadline', 'realtime', '-cpu-used', '6', '-row-mt', '1');
-    else args.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', String(crf), '-pix_fmt', 'yuv420p');
+    else args.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', String(crf), '-pix_fmt', 'yuv420p', '-g', String(Math.max(1, Math.round(o.fps * 2))), '-movflags', '+frag_keyframe+empty_moov+default_base_moof', '-flush_packets', '1'); // fragmented segments stay playable if ffmpeg is killed (a keyframe every 2 s); stop() remuxes them to a normal mp4
     if (a.length) args.push(...(ext === 'webm' ? ['-c:a', 'libopus', '-b:a', '128k'] : ['-c:a', 'aac', '-b:a', '160k']));
     args.push(file);
     const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'ignore', 'pipe'] });
@@ -151,10 +151,14 @@ class Recorder extends EventEmitter {
     const segs = this.segs.slice(); const ms = this.elapsed;
     this.reset();
     if (!segs.length) throw new Error('Nothing was recorded.');
-    if (segs.length === 1) { try { fs.renameSync(segs[0], out); } catch (e) { fs.copyFileSync(segs[0], out); fs.rmSync(segs[0], { force: true }); } }
+    if (segs.length === 1 && o.vid !== 'mp4') { try { fs.renameSync(segs[0], out); } catch (e) { fs.copyFileSync(segs[0], out); fs.rmSync(segs[0], { force: true }); } }
+    else if (segs.length === 1) { // fragmented mp4 -> regular faststart mp4 (stream copy, near-instant)
+      try { await exec('ffmpeg', ['-y', '-loglevel', 'error', '-i', segs[0], '-c', 'copy', '-movflags', '+faststart', out]); }
+      finally { fs.rmSync(segs[0], { force: true }); }
+    }
     else {
       const list = tmp('list.txt'); fs.writeFileSync(list, segs.map((s) => `file '${s.replace(/'/g, "'\\''")}'`).join('\n'));
-      try { await exec('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', out]); }
+      try { await exec('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', ...(o.vid === 'mp4' ? ['-movflags', '+faststart'] : []), out]); }
       finally { fs.rmSync(list, { force: true }); segs.forEach((s) => fs.rmSync(s, { force: true })); }
     }
     return { path: out, ms };
