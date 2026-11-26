@@ -88,6 +88,8 @@ function audioSources(audio, env, st) {
 }
 
 /* Emits 'failed' (reason string) when the helper or ffmpeg dies while a segment is recording. The segments written so far are kept; call stop() to salvage them. */
+/* SIGTERM, then SIGKILL if xcap is still alive a second later (it can sit in a blocked write after ffmpeg is gone). */
+const killHelper = (h) => { h.kill('SIGTERM'); setTimeout(() => { if (h.exitCode === null && h.signalCode === null) h.kill('SIGKILL'); }, 1000).unref(); };
 class Recorder extends EventEmitter {
   constructor() { super(); this.reset(); }
   reset() { this.active = false; this.paused = false; this.segs = []; this.elapsed = 0; this.segStart = 0; this.cur = null; this.opts = null; }
@@ -121,7 +123,7 @@ class Recorder extends EventEmitter {
   lost(c, reason) {
     if (this.cur !== c) return; this.cur = null;
     this.elapsed += Date.now() - this.segStart;
-    try { c.helper.kill('SIGTERM'); c.ff.kill('SIGKILL'); } catch (e) { /* already gone */ }
+    try { killHelper(c.helper); c.ff.kill('SIGKILL'); } catch (e) { /* already gone */ }
     if (fs.existsSync(c.file) && fs.statSync(c.file).size > 0) this.segs.push(c.file);
     this.emit('failed', reason);
   }
@@ -130,7 +132,7 @@ class Recorder extends EventEmitter {
   async endSegment() {
     const c = this.cur; if (!c) return; this.cur = null;
     this.elapsed += Date.now() - this.segStart;
-    c.helper.kill('SIGTERM');
+    killHelper(c.helper);
     await new Promise((r) => setTimeout(r, 150));
     c.ff.kill('SIGINT');
     const t = setTimeout(() => c.ff.kill('SIGKILL'), 6000);

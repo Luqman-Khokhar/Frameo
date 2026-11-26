@@ -17,7 +17,7 @@ app.whenReady().then(async () => {
   ok(!!reason, 'failed event fired: ' + reason);
   for (let i = 0; i < 40 && m.rec.active; i++) await sleep(250);
   ok(!m.rec.active, 'recorder stopped itself after failure');
-  await sleep(500); ok(kids('xcap').length === 0 && kids('ffmpeg').length === 0, 'no orphan helper/ffmpeg');
+  for (let i = 0; i < 20 && (kids('xcap').length || kids('ffmpeg').length); i++) await sleep(250); log('left:', kids('xcap').join(','), kids('ffmpeg').join(',')); ok(kids('xcap').length === 0 && kids('ffmpeg').length === 0, 'no orphan helper/ffmpeg');
   log('files:', fs.readdirSync(out).join(', ') || '(none)');
   // second run: clean stop still works
   const s2 = await m.startRecording({ x: 50, y: 50, w: 320, h: 240 }); ok(s2 && s2.ok, 'recording restarted');
