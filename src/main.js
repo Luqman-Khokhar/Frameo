@@ -261,9 +261,9 @@ ipcMain.handle('state', async () => {
 });
 ipcMain.handle('settings:save', (_e, patch) => {
   const before = settings.load(); const after = settings.save(patch);
-  if (patch.launch !== undefined && patch.launch !== before.launch) setAutostart(after.launch);
+  if (after.launch !== before.launch) setAutostart(after.launch);
   let failed = [];
-  if (patch.keys) { failed = registerKeys(); updateTray(); }
+  if (patch && patch.keys) { failed = registerKeys(); updateTray(); }
   return { settings: after, failedKeys: failed };
 });
 ipcMain.handle('region:pick', async (_e, init) => {
