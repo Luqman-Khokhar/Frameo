@@ -14,3 +14,5 @@ Region flow: `regionScreenshot` opens overlay with confirm "Capture", then `doSc
 During a recording, screenshots reuse that recording's clean base snapshot (`recBase`), main window stays untouched.
 
 Errors: `errInfo` classifies save errors (EACCES, EROFS, ENOSPC...) vs capture errors; main window shows a banner. `busy` flag blocks concurrent captures.
+
+- "Full screen" means the display chosen in the Screen picker (`scr().rect` in src/main.js), or the whole desktop for All screens. Test with `node test/geometry.js` and `test/e2e-multiscreen.js` (fakes two logical displays on one real screen).

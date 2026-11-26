@@ -27,6 +27,14 @@ The .deb pulls in ffmpeg and pulseaudio-utils. The AppImage does not bundle them
 ## Compress videos
 When a recording finishes, the preview offers one-click Medium and Low buttons with the estimated size. You can also use the Compress button on any recording in Recent, "Compress a video…" (or by dropping a video onto the window), choose Original, Medium (about half the size) or Low (about a fifth). A copy named `… (medium).mp4` or `… (low).mp4` is saved to Downloads (changeable in Settings → Capture). A video you just recorded is replaced by the compressed one (the original goes to Trash); other videos are never changed.
 
+## Trim and split videos
+Open **Trim a video…** (header of the Recent list), the scissors icon on a recording, or **Trim** in a recording's preview. A window opens with the video and a timeline.
+- **Split** keeps one selected part and drops the rest. Drag the handles on the timeline or type exact times.
+- **Trim** removes one or more marked parts (add each with **R**) and joins what is left into one video.
+- Export is **lossless and near-instant** by default: no quality loss, but cuts start on the next keyframe (Frameo recordings have one about every 2 s). Turn on **Frame-accurate** to re-encode for exact cut points (slower).
+- The original is never changed. The result is saved beside it as `… (split).mp4` or `… (trim).mp4` (videos that Frameo does not manage are saved to the Compress folder).
+- Keys: Space play/pause, arrows step one frame (Shift: one second), **I**/**O** set start/end at the playhead, **R** add a part, **Delete** remove it. While playing in Trim mode, removed parts are skipped so you hear the result.
+
 ## Default shortcuts
 Ctrl+Alt+1 full-screen shot · Ctrl+Alt+2 region shot · record start/stop and pause/resume are in Settings → Shortcuts (all changeable).
 
