@@ -14,11 +14,16 @@ npm install
 npm run build:native   # compiles native/xcap (the X11 capture helper)
 npm start
 ```
+## Test
+```
+npm test               # unit tests + Electron tests (uses xvfb-run when there is no display)
+```
 ## Package (.deb and AppImage)
 ```
 npm run dist           # output in dist/
 sudo apt install ./dist/frameo_*.deb
 ```
+The .deb pulls in ffmpeg and pulseaudio-utils. The AppImage does not bundle them: install `ffmpeg` and `pulseaudio-utils` on the system first.
 ## Compress videos
 After a recording, or from "Compress a video…" (or by dropping a video onto the window), choose Original, Medium (about half the size) or Low (about a fifth). A copy named `… (medium).mp4` or `… (low).mp4` is saved to Downloads (changeable in Settings → Capture). A video you just recorded is replaced by the compressed one (the original goes to Trash); other videos are never changed.
 

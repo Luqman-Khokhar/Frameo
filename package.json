@@ -12,11 +12,12 @@
   "scripts": {
     "build:native": "make -C native",
     "start": "npm run build:native && electron .",
-    "dist": "npm run build:native && electron-builder --linux deb AppImage"
+    "dist": "npm run build:native && electron-builder --linux deb AppImage",
+    "test": "bash test/run.sh"
   },
   "devDependencies": {
     "electron": "^45.5.0",
-    "electron-builder": "^25.0.0"
+    "electron-builder": "^26.0.0"
   },
   "build": {
     "appId": "app.frameo.desktop",
@@ -30,7 +31,9 @@
       "icon": "assets/icon.png",
       "synopsis": "Screenshots and screen recording",
       "desktop": {
-        "StartupWMClass": "frameo"
+        "entry": {
+          "StartupWMClass": "frameo"
+        }
       },
       "executableName": "frameo"
     },
