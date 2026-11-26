@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-11-26)
 - Trim & split videos: a new editor window with a video preview and a timeline. **Split** keeps one selected part; **Trim** removes one or more marked parts and joins the rest. Lossless and near-instant by default (cuts start on keyframes, roughly every 2 s for Frameo recordings); a Frame-accurate switch re-encodes for exact cut points. The original is never changed. Open it from the recording preview, the scissors icon on each recording in Recent, or "Trim a video…" for any video file. Keyboard: Space play/pause, arrows step a frame, I/O set start/end, R add a part, Delete remove it.
 - One-click screenshot while recording: a camera button on the recording toolbar saves a screenshot of the recorded area instantly and silently (no preview, no notification, nothing drawn into the video); the button shows a green tick. The screenshot shortcut during a recording is silent too.
 - Multi-screen: with 2+ displays a Screen picker appears (each display, plus All screens for full-screen captures). Full screen, region overlay, countdown, recording toolbar, live ink, and the editor window follow the chosen display; unplugging a display falls back to the primary. Single-display systems are unchanged.
