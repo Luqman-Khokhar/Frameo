@@ -104,3 +104,5 @@ input[type=range]{accent-color:var(--text);width:140px}
 @media (prefers-reduced-motion:reduce){.bar i{transition:none}}
 .ic[disabled]{opacity:.4;cursor:not-allowed}
 body.drop #app{outline:2px dashed var(--text);outline-offset:-8px}
+.pvc{display:flex;align-items:center;gap:8px;padding:10px 16px 0;flex-wrap:wrap}
+.rrow .chip{flex:none}.rmeta .sub{overflow:hidden;text-overflow:ellipsis}.chip:disabled{opacity:.5;cursor:default}

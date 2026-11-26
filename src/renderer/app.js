@@ -30,7 +30,7 @@ const P = {
 const ico = (n, s = 17, extra = '') => `<svg viewBox="0 0 20 20" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${P[n]}</svg>`;
 
 const S = {
-  mode: 'shot', view: 'main', tab: 'general', busy: false, st: null, env: null, recents: [], preview: null, cmp: null, editKey: null,
+  mode: 'shot', view: 'main', tab: 'general', busy: false, st: null, env: null, recents: [], preview: null, cmp: null, editKey: null, hints: {},
   banner: null, // {kind,title,body,cta}
   cfg: {
     shot: { src: 'full', lock: false, ratio: 16 / 9, size: { region: null, custom: { w: 1280, h: 720 } } },
@@ -90,9 +90,9 @@ function when(t) {
   return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ', ' + hm;
 }
 function recentHtml() {
-  const head = `<div class="rhead"><span class="sh">Recent</span><span style="display:flex;gap:10px"><button class="link" data-act="cmp-pick">${ico('shrink', 14)}Compress a video…</button>${S.recents.length ? `<button class="link" data-act="folder">${ico('folder', 14)}Open folder</button>` : ''}</span></div>`;
-  if (!S.recents.length) return `${head}<div class="empty"><svg viewBox="0 0 64 48" width="64" height="48" fill="none" aria-hidden="true"><path d="M8 16V9a3 3 0 0 1 3-3h7M46 6h7a3 3 0 0 1 3 3v7M56 32v7a3 3 0 0 1-3 3h-7M18 42h-7a3 3 0 0 1-3-3v-7" stroke="var(--text)" stroke-width="2.4" stroke-linecap="round"/><circle cx="32" cy="24" r="5" fill="#F2C46A"/></svg><b>Nothing captured yet</b><div class="sub" style="max-width:300px">Your screenshots and recordings will show up here. Try <span class="kbd">${keyText(S.st.keys.shotRegion)}</span> to grab a region without opening Frameo.</div></div>`;
-  return `${head}<div class="rlist">${S.recents.map((it, i) => `<div class="rrow"><button class="thumb" data-act="open-preview" data-i="${i}" aria-label="Open ${esc(it.name)}">${it.thumb ? `<img src="${it.thumb}" alt="">` : ''}${it.kind === 'rec' ? `<span class="play"><svg viewBox="0 0 20 20" width="8" height="8"><path d="M6 3.5l11 6.5-11 6.5z" fill="#FCF0DA"/></svg></span>` : ''}</button><div class="rmeta"><div class="n">${esc(it.name)}</div><div class="sub tn">${it.kind === 'rec' ? 'Recording · ' + fmtDur(it.dur) : 'Screenshot'} · ${when(it.mtime)}</div></div><div class="acts"><button class="ic" data-act="open-preview" data-i="${i}" aria-label="Open">${ico('open', 16)}</button>${it.kind === 'rec' ? `<button class="ic" data-act="cmp-row" data-i="${i}" aria-label="Compress">${ico('shrink', 16)}</button>` : ''}<button class="ic" data-act="reveal" data-i="${i}" aria-label="Reveal in folder">${ico('folder', 16)}</button><button class="ic dng" data-act="del" data-i="${i}" aria-label="Move to Trash">${ico('trash', 16)}</button></div></div>`).join('')}</div>`;
+  const head = `<div class="rhead"><span class="sh">Recent</span><span style="display:flex;gap:10px"><button class="chip" data-act="cmp-pick">${ico('shrink', 14)}Compress a video…</button>${S.recents.length ? `<button class="link" data-act="folder">${ico('folder', 14)}Open folder</button>` : ''}</span></div>`;
+  if (!S.recents.length) return `${head}<div class="empty"><svg viewBox="0 0 64 48" width="64" height="48" fill="none" aria-hidden="true"><path d="M8 16V9a3 3 0 0 1 3-3h7M46 6h7a3 3 0 0 1 3 3v7M56 32v7a3 3 0 0 1-3 3h-7M18 42h-7a3 3 0 0 1-3-3v-7" stroke="var(--text)" stroke-width="2.4" stroke-linecap="round"/><circle cx="32" cy="24" r="5" fill="#F2C46A"/></svg><b>Nothing captured yet</b><div class="sub" style="max-width:300px">Your screenshots and recordings will show up here. Try <span class="kbd">${keyText(S.st.keys.shotRegion)}</span> to grab a region without opening Frameo.</div><div class="sub" style="max-width:300px">Big video? Drop it on this window or use <b>Compress a video…</b> to shrink it to half or a fifth of its size.</div></div>`;
+  return `${head}<div class="rlist">${S.recents.map((it, i) => `<div class="rrow"><button class="thumb" data-act="open-preview" data-i="${i}" aria-label="Open ${esc(it.name)}">${it.thumb ? `<img src="${it.thumb}" alt="">` : ''}${it.kind === 'rec' ? `<span class="play"><svg viewBox="0 0 20 20" width="8" height="8"><path d="M6 3.5l11 6.5-11 6.5z" fill="#FCF0DA"/></svg></span>` : ''}</button><div class="rmeta"><div class="n">${esc(it.name)}</div><div class="sub tn">${it.kind === 'rec' ? fmtDur(it.dur) + ' · ' + fmtSize(it.bytes) : 'Screenshot'} · ${when(it.mtime)}</div></div>${it.kind === 'rec' ? `<button class="chip" data-act="cmp-row" data-i="${i}" aria-label="Compress ${esc(it.name)}">${ico('shrink', 14)}Compress</button>` : ''}<div class="acts"><button class="ic" data-act="open-preview" data-i="${i}" aria-label="Open">${ico('open', 16)}</button><button class="ic" data-act="reveal" data-i="${i}" aria-label="Reveal in folder">${ico('folder', 16)}</button><button class="ic dng" data-act="del" data-i="${i}" aria-label="Move to Trash">${ico('trash', 16)}</button></div></div>`).join('')}</div>`;
 }
 function mainHtml() {
   const m = S.mode, isRec = m === 'rec', { c, src, size } = cur(), k = S.st.keys, blocked = !!blockedReason();
@@ -161,7 +161,22 @@ function renderPreview() {
   el.innerHTML = `<div class="pv"><div class="pvh"><div class="n">${esc(it.name)}</div><button class="ic" data-act="pv-close" aria-label="Close preview">${ico('x', 16)}</button></div>
   <div class="pvm">${it.kind === 'rec' ? `<video src="${url}" controls preload="metadata"></video>` : `<img src="${url}" alt="">`}</div>
   <div class="pvi sub"><span class="tn">${it.kind === 'rec' ? 'Recording · ' + fmtDur(it.dur) : 'Screenshot'} · ${fmtSize(it.bytes)}</span><span>${ico('shield', 14)}Frameo’s controls aren’t in this capture</span></div>
+  ${it.kind === 'rec' ? `<div class="pvc" id="pvCmp" aria-live="polite"><span class="sub">Checking size options…</span></div>` : ''}
   <div class="pva"><button class="ghost dng" data-act="pv-del">${ico('trash', 15)}Delete</button><button class="ghost" data-act="pv-reveal">${ico('folder', 15)}Reveal in folder</button>${it.kind === 'shot' ? `<button class="ghost" data-act="pv-edit">${ico('edit', 15)}Annotate</button><button class="ghost" data-act="pv-copy">${ico('copy', 15)}Copy</button>` : `<button class="ghost" data-act="pv-open">${ico('open', 15)}Open in player</button><button class="ghost" data-act="pv-cmp">${ico('shrink', 15)}Compress</button>`}<span class="grow"></span><button class="solid" data-act="pv-close">Done</button></div></div>`;
+  if (it.kind === 'rec') loadCmpHint(it);
+}
+/* Real size estimates for the recording in the preview: one-click Medium / Low. */
+function cmpHintHtml(r, it) {
+  if (!r || r.error) return '';
+  const opts = ['medium', 'low'].map((k) => ({ k, p: r.plans[k] })).filter((o) => o.p && o.p.ok);
+  if (!opts.length) return `<span class="sub">${esc((r.plans.medium && r.plans.medium.reason) || 'Too short or small to compress.')}</span>`;
+  return `<span class="sub tn">${ico('shrink', 14)} Shrink ${fmtSize(it.bytes)} to</span>${opts.map((o) => `<button class="chip" data-act="pv-cmp" data-k="${o.k}">${o.k === 'medium' ? 'Medium' : 'Low'} · about ${fmtSize(o.p.estBytes)}</button>`).join('')}`;
+}
+async function loadCmpHint(it) {
+  const k = it.path + '|' + it.bytes; let r = S.hints[k];
+  if (!r) { r = await api.cmpProbe(it.path); if (r && !r.error) S.hints[k] = r; }
+  const box = $('#pvCmp'); if (!box || !S.preview || S.preview.path !== it.path) return;
+  box.innerHTML = cmpHintHtml(r, it); if (!box.innerHTML) box.hidden = true;
 }
 let toastT;
 function toast(msg) { const t = $('#toast'); t.innerHTML = `<svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="#F2C46A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg>${esc(msg)}`; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 2200); }
@@ -235,7 +250,7 @@ document.addEventListener('click', async (e) => {
     case 'pv-del': if (await api.del(S.preview.path)) { S.preview = null; await refreshRecents(); render(); toast('Moved to Trash'); } return;
     case 'fix-save': S.banner = null; S.view = 'settings'; S.tab = 'general'; return render();
     case 'dismiss': S.banner = null; return render();
-    case 'pv-cmp': return openCompress(S.preview.path, S.preview.fresh);
+    case 'pv-cmp': return openCompress(S.preview.path, S.preview.fresh, d.k);
     case 'cmp-row': return openCompress(it.path, false);
     case 'cmp-pick': { const f = await api.cmpPick(); if (f) openCompress(f, false); return; }
     case 'cmp-close': S.cmp = null; return renderCompress();
@@ -303,7 +318,7 @@ function syncMeters() {
 /* ---------- compress ---------- */
 const VIDEO_RE = /\.(mp4|webm|mkv|mov|avi|m4v)$/i;
 const fmtEta = (s) => (s < 60 ? Math.max(1, Math.round(s)) + ' s left' : Math.floor(s / 60) + ' min ' + String(Math.round(s % 60)).padStart(2, '0') + ' s left');
-async function openCompress(file, fresh) {
+async function openCompress(file, fresh, pref) {
   if (S.cmp && S.cmp.state === 'running') return;
   S.preview = null; renderPreview();
   S.cmp = { file, fresh: !!fresh, state: 'probing', key: 'medium' }; renderCompress();
@@ -311,7 +326,7 @@ async function openCompress(file, fresh) {
   if (!S.cmp || S.cmp.file !== file) return;
   if (r.error) { S.cmp.state = 'error'; S.cmp.message = r.error; return renderCompress(); }
   S.cmp.info = r.info; S.cmp.plans = r.plans; S.cmp.state = 'idle';
-  S.cmp.key = r.plans.medium.ok ? 'medium' : r.plans.low.ok ? 'low' : 'original';
+  S.cmp.key = pref && r.plans[pref] && r.plans[pref].ok ? pref : r.plans.medium.ok ? 'medium' : r.plans.low.ok ? 'low' : 'original';
   renderCompress(); const sel = $('#cmpSel'); if (sel) sel.focus();
 }
 async function cmpStart() {

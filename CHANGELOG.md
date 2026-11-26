@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Compression is easier to find: one-click Medium / Low buttons with real size estimates in the recording preview, a visible Compress button and file size on every recording in Recent, a clearer "Compress a video…" button, and a drop hint in the empty state.
 - Security: private 0700 temp dir for capture files; settings validated and written atomically; IPC restricted to the main window and to files Frameo manages.
 - Recording: a dead ffmpeg or capture helper is detected and what was recorded is saved; quitting mid-recording stops and saves first.
 - Electron 33 to 45.5.0; electron-builder 25 to 26.
