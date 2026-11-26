@@ -6,6 +6,7 @@ const { app } = require('electron');
 const DEFAULTS = {
   saveDir: path.join(os.homedir(), 'Pictures', 'Frameo'),
   compressDir: path.join(os.homedir(), 'Downloads'),
+  screen: 'primary', // 'primary' | 'all' | a display id (see displays.js)
   theme: 'light', img: 'png', vid: 'mp4', quality: 'High', fps: 30,
   dim: 42, cd: 3, editAfterShot: false, badge: true, ratios: true, launch: false, tray: true,
   shot: { w: 1280, h: 720 }, rec: { w: 1280, h: 720 },
@@ -27,6 +28,7 @@ const bool = (v) => (typeof v === 'boolean' ? v : undefined);
 const dims = (v) => { if (!v || typeof v !== 'object') return undefined; const o = {}; const w = num(v.w, 16, 16384), h = num(v.h, 16, 16384); if (w !== undefined) o.w = w; if (h !== undefined) o.h = h; return Object.keys(o).length ? o : undefined; };
 const SCHEMA = {
   saveDir: absDir, compressDir: absDir,
+  screen: (v) => { const s = typeof v === 'number' ? String(v) : v; return typeof s === 'string' && /^(primary|all|\d{1,18})$/.test(s) ? s : undefined; },
   theme: oneOf(['light', 'dark']), img: oneOf(['png', 'jpg', 'webp']), vid: oneOf(['mp4', 'webm']), quality: oneOf(['Low', 'Medium', 'High']),
   fps: (v) => num(v, 5, 60), dim: (v) => num(v, 0, 100), cd: (v) => num(v, 0, 10),
   editAfterShot: bool, badge: bool, ratios: bool, launch: bool, tray: bool,

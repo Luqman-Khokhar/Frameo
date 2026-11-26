@@ -9,6 +9,7 @@ t('enums + ranges', () => { const r = s.sanitize({ img: 'exe', vid: 'webm', fps:
 t('dirs must be absolute strings', () => { assert.deepStrictEqual(s.sanitize({ saveDir: 'rel/x', compressDir: 5 }), {}); assert.strictEqual(s.sanitize({ saveDir: '/home/u/../u/Pics ' }).saveDir, '/home/u/Pics'); });
 t('dims clamp', () => assert.deepStrictEqual(s.sanitize({ shot: { w: 1, h: 99999, z: 3 } }), { shot: { w: 16, h: 16384 } }));
 t('keys validated', () => assert.deepStrictEqual(s.sanitize({ keys: { rec: 'Control+Alt+3', pause: 'rm -rf /', other: 'A' } }), { keys: { rec: 'Control+Alt+3' } }));
+t('screen choice', () => { assert.deepStrictEqual(s.sanitize({ screen: 'all' }), { screen: 'all' }); assert.deepStrictEqual(s.sanitize({ screen: 123456 }), { screen: '123456' }); assert.deepStrictEqual(s.sanitize({ screen: '../x' }), {}); assert.deepStrictEqual(s.sanitize({ screen: {} }), {}); });
 t('non-object patch', () => { assert.deepStrictEqual(s.sanitize(null), {}); assert.deepStrictEqual(s.sanitize('x'), {}); });
 t('save is atomic + sanitized', () => { const r = s.save({ fps: 24, junk: 1, audio: { mic: true } }); assert.strictEqual(r.fps, 24); assert.strictEqual(r.junk, undefined); assert.strictEqual(r.audio.sys, true); assert.ok(!fs.existsSync(path.join(ud, 'settings.json.tmp'))); assert.strictEqual(JSON.parse(fs.readFileSync(path.join(ud, 'settings.json'), 'utf8')).fps, 24); });
 t('corrupt file backed up, defaults used', () => {

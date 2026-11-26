@@ -20,10 +20,11 @@ function open(file, cb) {
   if (!MIME[ext] || !fs.existsSync(f)) return { error: 'file' };
   src = f; saved = null; onSaved = cb || null; hidden = false;
   if (win && !win.isDestroyed()) { send(); win.show(); win.focus(); return { ok: true }; }
-  const wa = screen.getPrimaryDisplay().workArea; const sz = nativeImage.createFromPath(f).getSize();
+  const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea; const sz = nativeImage.createFromPath(f).getSize(); // opens on the screen the user is working on
   const clamp = (v, lo, hi) => Math.round(Math.max(lo, Math.min(v, hi)));
+  const ew = clamp(sz.width + 48, 760, wa.width * 0.9), eh = clamp(sz.height + 110, 520, wa.height * 0.9);
   win = new BrowserWindow({
-    width: clamp(sz.width + 48, 760, wa.width * 0.9), height: clamp(sz.height + 110, 520, wa.height * 0.9), minWidth: 640, minHeight: 420,
+    width: ew, height: eh, x: Math.round(wa.x + (wa.width - ew) / 2), y: Math.round(wa.y + (wa.height - eh) / 2), minWidth: 640, minHeight: 420,
     title: 'Frameo — Annotate', icon: path.join(__dirname, '..', 'assets', 'icon.png'), backgroundColor: '#FCF0DA', show: false,
     webPreferences: { preload: R('preload-editor.js'), contextIsolation: true, nodeIntegration: false }
   });

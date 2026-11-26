@@ -7,7 +7,9 @@ const system = require('./system');
 const capture = require('./capture');
 const compress = require('./compress');
 const editor = require('./editor');
+const trimmer = require('./trimmer');
 const live = require('./live');
+const displays = require('./displays');
 
 app.setName('frameo');
 app.commandLine.appendSwitch('class', 'frameo');
@@ -16,9 +18,12 @@ if (!app.requestSingleInstanceLock()) { app.quit(); }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const asset = (n) => path.join(__dirname, '..', 'assets', n);
 const R = (n) => path.join(__dirname, 'renderer', n);
-const TB = { w: 272, h: 44, ph: 88, gap: 6 }; // ph = live-drawing palette height, shown above/below the bar
+const TB = { w: 308, h: 44, ph: 88, gap: 6 }; // ph = live-drawing palette height, shown above/below the bar
 // On Linux/X11 Electron works in DIPs; physical pixels = DIPs × the display scale factor.
-const toPhys = (r) => { const f = screen.getPrimaryDisplay().scaleFactor || 1; return { x: Math.round(r.x * f), y: Math.round(r.y * f), width: Math.round(r.width * f), height: Math.round(r.height * f) }; };
+/* Display the user chose in the Screen picker ('primary' on single-display systems): toolbar, countdown, overlays and "full screen" all follow it. */
+const scr = () => displays.current(screen, settings.load().screen);
+const target = () => scr().display;
+const toPhys = (r) => { const f = target().scale || 1; return { x: Math.round(r.x * f), y: Math.round(r.y * f), width: Math.round(r.width * f), height: Math.round(r.height * f) }; };
 
 /* ---------------- IPC trust: only the main window may call these, and only on files Frameo manages ---------------- */
 const fromMain = (e) => !!(mainWin && !mainWin.isDestroyed() && e.sender === mainWin.webContents);
@@ -43,7 +48,7 @@ let mainWin = null, tray = null, toolbarWin = null, overlayWin = null, countdown
 let env = { wayland: false, ffmpeg: true, helper: true, sinks: [], mics: [], defaultSink: '' };
 const rec = new capture.Recorder();
 rec.on('failed', (why) => { if (!rec.active) return; notify('Recording stopped', 'Capture failed: ' + why + '. Saving what was recorded.'); stopRecording(); });
-let recBase = null, recTimer = null, recMode = 'toolbar', busy = false, overlayDone = null, compressJob = null, paintOpen = false, paintUp = false;
+let recBase = null, recRect = null, trayFlash = 0, recTimer = null, recMode = 'toolbar', busy = false, overlayDone = null, compressJob = null, paintOpen = false, paintUp = false;
 
 /* ---------------- windows ---------------- */
 function createMain() {
@@ -62,7 +67,7 @@ function toMain(ch, ...a) { if (mainWin && !mainWin.isDestroyed()) mainWin.webCo
 const notify = (title, body) => { try { new Notification({ title, body }).show(); } catch (e) { /* ignore */ } };
 
 function createToolbar() {
-  const wa = screen.getPrimaryDisplay().workArea;
+  const wa = target().workArea;
   toolbarWin = new BrowserWindow({
     width: TB.w, height: TB.h, x: Math.round(wa.x + (wa.width - TB.w) / 2), y: Math.round(wa.y + wa.height - TB.h - 28),
     frame: false, transparent: true, resizable: false, maximizable: false, minimizable: false, skipTaskbar: true,
@@ -81,12 +86,13 @@ async function paintToggle() {
   if (!paintOpen) { paintOpen = true; const d = screen.getDisplayMatching(b).bounds; paintUp = b.y + TB.h / 2 > d.y + d.height / 2; toolbarWin.setBounds({ x: b.x, y: paintUp ? b.y - extra : b.y, width: TB.w, height: TB.h + extra }); }
   else { paintOpen = false; toolbarWin.setBounds({ x: b.x, y: paintUp ? b.y + extra : b.y, width: TB.w, height: TB.h }); }
   toolbarWin.webContents.send('paint', { open: paintOpen, up: paintUp });
+  live.setDisplay(target().bounds);
   await live.setDraw(paintOpen);
   if (toolbarWin && !toolbarWin.isDestroyed()) live.setCut('toolbar', toolbarWin.getBounds()); // the WM keeps the overlay above the toolbar, so punch the toolbar's rect out of the overlay: it stays clickable while drawing
 }
 
 async function countdown(n) {
-  const d = screen.getPrimaryDisplay().bounds;
+  const d = target().bounds;
   countdownWin = new BrowserWindow({ width: 220, height: 220, x: Math.round(d.x + d.width / 2 - 110), y: Math.round(d.y + d.height / 2 - 110),
     frame: false, transparent: true, skipTaskbar: true, focusable: false, hasShadow: false, alwaysOnTop: true, show: false,
     webPreferences: { preload: R('preload-toolbar.js'), contextIsolation: true } });
@@ -102,13 +108,13 @@ async function countdown(n) {
 /* Region picker overlay → resolves { rect (physical px), lock, ratio } or null */
 function pickRegion(init) {
   return new Promise((resolve) => {
-    const d = screen.getPrimaryDisplay(); const b = d.bounds;
+    const d = target(); const b = d.bounds;
     overlayWin = new BrowserWindow({ x: b.x, y: b.y, width: b.width, height: b.height, frame: false, transparent: true, alwaysOnTop: true,
       skipTaskbar: true, resizable: false, movable: false, hasShadow: false, show: false, enableLargerThanScreen: true,
       webPreferences: { preload: R('preload-overlay.js'), contextIsolation: true } });
     overlayWin.setAlwaysOnTop(true, 'screen-saver');
     overlayWin.loadFile(R('overlay.html'));
-    overlayWin.webContents.once('did-finish-load', () => { overlayWin.webContents.send('init', { ...init, scale: d.scaleFactor }); overlayWin.show(); overlayWin.focus(); });
+    overlayWin.webContents.once('did-finish-load', () => { overlayWin.webContents.send('init', { ...init, scale: d.scale }); overlayWin.show(); overlayWin.focus(); });
     overlayDone = (res) => {
       overlayDone = null;
       if (overlayWin && !overlayWin.isDestroyed()) overlayWin.destroy();
@@ -169,18 +175,25 @@ async function doScreenshot(rect) {
   busy = true;
   const st = settings.load();
   const wasVisible = mainWin && mainWin.isVisible();
-  const edHid = !rec.active && editor.hide();
+  const edHid = !rec.active && [editor.hide(), trimmer.hide()].some(Boolean); // Frameo windows stay out of captures
   try {
     if ((wasVisible || edHid) && !rec.active) { if (wasVisible) mainWin.hide(); await sleep(450); } // let the WM finish fading our windows out
     fs.mkdirSync(st.saveDir, { recursive: true });
-    const r = await capture.screenshot({ rect, dir: st.saveDir, fmt: st.img, base: rec.active ? recBase : null });
+    const r = await capture.screenshot({ rect: rect || scr().rect, dir: st.saveDir, fmt: st.img, base: rec.active ? recBase : null });
     const item = await itemFor(r.path);
-    if (!rec.active) { showMain(); toMain('captured', item); if (st.editAfterShot) openEditor(item.path); } else notify('Screenshot saved', item.name);
+    if (!rec.active) { showMain(); toMain('captured', item); if (st.editAfterShot) openEditor(item.path); } else shotFeedback(true); // no notification while recording: the shell would draw it into the video
     return { item };
   } catch (e) {
-    if (!rec.active) showMain();
-    const info = errInfo(e); toMain('capture-error', info); return info;
-  } finally { busy = false; if (!rec.active) editor.restore(); }
+    const info = errInfo(e);
+    if (rec.active) shotFeedback(false); else { showMain(); toMain('capture-error', info); }
+    return info;
+  } finally { busy = false; if (!rec.active) { editor.restore(); trimmer.restore(); } }
+}
+
+/* Silent feedback for a screenshot taken during a recording: tick on the toolbar button (never captured), or a tray menu label in tray mode. */
+function shotFeedback(ok) {
+  if (toolbarWin && !toolbarWin.isDestroyed()) toolbarWin.webContents.send('shot', { ok });
+  else if (ok) { trayFlash = Date.now() + 2500; updateTray(); }
 }
 
 async function regionScreenshot() {
@@ -195,13 +208,13 @@ async function regionScreenshot() {
 async function startRecording(rectIn) {
   const b = blocked(); if (b) return { error: b };
   if (rec.active) return { error: 'busy' };
-  if (compressJob) return { error: 'compressing' };
+  if (compressJob || trimmer.busy()) return { error: 'compressing' };
   busy = true;
   const st = settings.load();
   try {
     if (mainWin) mainWin.hide();
-    editor.hide();
-    const rect = rectIn ? { ...rectIn } : null;
+    editor.hide(); trimmer.hide();
+    const rect = rectIn ? { ...rectIn } : scr().rect;
     if (st.cd > 0) { const ok = await countdown(st.cd); if (!ok) { showMain(); editor.restore(); return { cancelled: true }; } } else await sleep(450);
     recBase = capture.tmp('base.raw');
     const raw = capture.tmp('first.raw');
@@ -214,6 +227,7 @@ async function startRecording(rectIn) {
     const visible = await capture.toolbarVisible({ bounds: { x: phys.x, y: phys.y }, base: recBase });
     if (visible) { closeToolbar(); recMode = 'tray'; note = 'The floating toolbar could not be hidden from capture on this system, so controls are in the tray instead.'; }
     const audioSrcs = capture.audioSources(st.audio, env, st);
+    recRect = { x: g.x, y: g.y, w: g.w, h: g.h };
     rec.start({ rect: { x: g.x, y: g.y, w: g.w, h: g.h }, base: recBase, fps: st.fps, quality: st.quality, vid: st.vid, dir: st.saveDir, audioSrcs });
     setTray(true);
     clearInterval(recTimer);
@@ -221,7 +235,7 @@ async function startRecording(rectIn) {
     if (note) notify('Recording started', note);
     return { ok: true, mode: recMode, note, audio: audioSrcs.length };
   } catch (e) {
-    closeToolbar(); showMain(); editor.restore(); const info = errInfo(e); toMain('capture-error', info); return info;
+    closeToolbar(); showMain(); editor.restore(); trimmer.restore(); const info = errInfo(e); toMain('capture-error', info); return info;
   } finally { busy = false; }
 }
 async function pauseResume() {
@@ -237,10 +251,10 @@ async function stopRecordingNow() {
   clearInterval(recTimer); closeToolbar(); setTray(false);
   try {
     const r = await rec.stop();
-    if (recBase) fs.rm(recBase, () => {}); recBase = null;
+    if (recBase) fs.rm(recBase, () => {}); recBase = null; recRect = null;
     const item = await itemFor(r.path);
-    show(); editor.restore(); toMain('captured', item); return { item };
-  } catch (e) { show(); editor.restore(); const info = errInfo(e); toMain('capture-error', info); return info; }
+    show(); editor.restore(); trimmer.restore(); toMain('captured', item); return { item };
+  } catch (e) { show(); editor.restore(); trimmer.restore(); const info = errInfo(e); toMain('capture-error', info); return info; }
 }
 
 /* ---------------- tray + shortcuts ---------------- */
@@ -254,7 +268,7 @@ function updateTray() {
   if (!tray) return;
   const k = settings.load().keys; const items = [];
   if (rec.active) {
-    items.push({ label: `${rec.paused ? 'Paused' : 'Recording'}  ${fmt(rec.ms())}`, enabled: false },
+    items.push({ label: `${rec.paused ? 'Paused' : 'Recording'}  ${fmt(rec.ms())}${Date.now() < trayFlash ? '  ·  Screenshot saved' : ''}`, enabled: false },
       { label: rec.paused ? 'Resume' : 'Pause', accelerator: k.pause, registerAccelerator: false, click: pauseResume },
       { label: 'Stop recording', accelerator: k.rec, registerAccelerator: false, click: stopRecording });
   } else {
@@ -289,7 +303,7 @@ function setAutostart(on) {
 /* ---------------- IPC ---------------- */
 handle('state', async () => {
   env = { ...env, ...(await system.probe()) };
-  return { settings: settings.load(), env, recording: { active: rec.active, paused: rec.paused }, platform: process.platform };
+  return { settings: settings.load(), env, displays: scr().list, recording: { active: rec.active, paused: rec.paused }, platform: process.platform };
 });
 handle('settings:save', (_e, patch) => {
   const before = settings.load(); const after = settings.save(patch);
@@ -362,12 +376,22 @@ handle('compress:start', async (_e, file, key, replaceOriginal) => {
     .finally(() => { compressJob = null; });
   return { started: true };
 });
+/* Trim & split: opens the editor window for a video. Results go beside the source only when Frameo manages it or the user picked it in the dialog;
+   anything else (a dropped file from elsewhere) is saved to the Compress output folder. */
+handle('trim:open', (_e, p) => {
+  const f = videoPath(p); if (!f) return { error: 'file' };
+  if (rec.active) return { error: 'recording' };
+  if (trimmer.busy()) return { error: 'busy' };
+  const beside = picked.has(f) || itemPath(f);
+  return trimmer.open(f, { outDir: beside ? path.dirname(f) : settings.load().compressDir, canRun: () => (rec.active ? 'recording' : null), onDone: () => toMain('recents-changed') });
+});
 handle('compress:cancel', () => { if (compressJob) compressJob.cancel(); });
 handle('win:min', () => mainWin && mainWin.minimize());
 handle('win:close', () => mainWin && mainWin.close());
 const fromToolbar = (e) => !!(toolbarWin && !toolbarWin.isDestroyed() && e.sender === toolbarWin.webContents);
 ipcMain.on('toolbar:pause', (e) => { if (fromToolbar(e)) pauseResume(); });
 ipcMain.on('toolbar:stop', (e) => { if (fromToolbar(e)) stopRecording(); });
+ipcMain.on('toolbar:shot', (e) => { if (fromToolbar(e) && rec.active && recRect) doScreenshot({ ...recRect }); }); // screenshot of the recorded area
 ipcMain.on('toolbar:move', (e, x, y) => { if (fromToolbar(e) && isFinite(x) && isFinite(y)) { toolbarWin.setBounds({ x: Math.round(x), y: Math.round(y), width: TB.w, height: paintOpen ? TB.h + TB.ph + TB.gap : TB.h }); live.setCut('toolbar', toolbarWin.getBounds()); } });
 ipcMain.on('paint:toggle', (e) => { if (toolbarWin && e.sender === toolbarWin.webContents) paintToggle(); });
 ipcMain.on('paint:cmd', (e, c, a) => {
@@ -387,6 +411,7 @@ app.whenReady().then(async () => {
   tray = new Tray(nativeImage.createFromPath(asset('tray.png')).resize({ width: 22, height: 22 }));
   tray.on('click', showMain); updateTray();
   registerKeys();
+  for (const ev of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(ev, () => toMain('displays', scr().list)); // plug/unplug: the Screen picker updates, a vanished choice falls back to primary
   if (!process.argv.includes('--hidden')) createMain();
 });
 app.on('window-all-closed', () => { /* stay in the tray */ });
@@ -395,6 +420,7 @@ let quitStopped = false;
 app.on('before-quit', (e) => {
   app.isQuitting = true;
   if (compressJob) compressJob.cancel();
+  trimmer.cancel();
   if (rec.active && !quitStopped) { e.preventDefault(); quitStopped = true; stopRecording().finally(() => app.quit()); }
 });
 app.on('will-quit', () => { rec.kill(); globalShortcut.unregisterAll(); if (recBase) fs.rmSync(recBase, { force: true }); capture.cleanupTmp(); });

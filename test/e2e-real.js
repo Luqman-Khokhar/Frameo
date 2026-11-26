@@ -4,6 +4,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs'); const os = require('os'); const path = require('path'); const cp = require('child_process');
 app.setPath('userData', fs.mkdtempSync(path.join(os.tmpdir(), 'frameo-e2e-ud-'))); // never touch the real settings.json
+const { Notification } = require('electron'); let notes = 0; const realShow = Notification.prototype.show; Notification.prototype.show = function () { notes++; return realShow.apply(this, arguments); }; // count desktop notifications (they would be drawn into a recording)
 const m = require('../src/main.js'); const settings = require('../src/settings.js'); const system = require('../src/system.js'); const live = require('../src/live.js'); const editor = require('../src/editor.js');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms)); const log = (...a) => console.log('[e2e]', ...a);
 const out = fs.mkdtempSync(path.join(os.tmpdir(), 'frameo-e2e-')); let fails = 0;
@@ -42,6 +43,17 @@ app.whenReady().then(async () => {
   await m.paintToggle(); await sleep(500); // ink off: stays visible, click-through
   r = await m.doScreenshot({ x: 0, y: 0, w: 1280, h: 720 }); const reds = r.item ? redPixels(r.item.path) : 0;
   ok(reds > baseReds + 1500, 'live ink is present in a capture taken during recording', 'red px before=' + baseReds + ' after=' + reds);
+  // one-click screenshot from the toolbar: saved silently, tick on the button, no notification
+  const tbw = m.getToolbar(); const filesBefore = fs.readdirSync(out).filter((n) => /^Screenshot /.test(n)).length; notes = 0;
+  await tbw.webContents.executeJavaScript('document.getElementById("shot").click()'); await sleep(1500);
+  const filesAfter = fs.readdirSync(out).filter((n) => /^Screenshot /.test(n)); ok(filesAfter.length === filesBefore + 1, 'toolbar screenshot button saved one new screenshot');
+  const newest = filesAfter.map((n) => path.join(out, n)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+  ok(probe(newest, 'stream=width,height') === '1280,720', 'toolbar screenshot covers the recorded area (1280x720)');
+  ok(notes === 0, 'no desktop notification while recording', 'notifications=' + notes);
+  await tbw.webContents.executeJavaScript('document.getElementById("shot").click()');
+  let tick = ''; for (let i = 0; i < 20 && tick !== 'ok'; i++) { await sleep(100); tick = await tbw.webContents.executeJavaScript('document.getElementById("shot").className'); } // the screenshot takes a moment, then the tick appears
+  ok(tick === 'ok', 'toolbar button shows the green tick');
+  await sleep(1500); ok(await tbw.webContents.executeJavaScript('document.getElementById("shot").className') === '', 'tick resets to the camera icon');
   await m.pauseResume(); await sleep(600); await m.pauseResume(); await sleep(1500);
   const f = await m.stopRecording() || {};
   ok(f.item && f.item.bytes > 0, 'recording saved', f.item && f.item.name);

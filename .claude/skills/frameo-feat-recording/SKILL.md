@@ -12,3 +12,6 @@ description: Screen recording feature: start with countdown, clean base snapshot
 Controls: toolbar, tray menu (Pause/Resume, Stop), shortcuts rec (toggle) and pause. `stopRecording` closes toolbar, restores tray, removes base file, shows main with preview of the new file.
 
 Rules: rect must be even-sized; never start recording if toolbar is visible in capture without moving controls to tray; clean temp files (`tmp()` paths under os.tmpdir with pid prefix).
+
+- Screenshots taken while recording never call `notify()` (a shell notification would be drawn into the video); feedback goes to the toolbar tick (`shotFeedback` in src/main.js) or a tray menu label in tray mode.
+- Multi-screen: `src/displays.js` resolves the Screen setting to a display and a full-screen rect (null = whole X root). `startRecording(null)` / `doScreenshot(null)` use `scr().rect`; toolbar, countdown, overlay and live ink use `target()`.

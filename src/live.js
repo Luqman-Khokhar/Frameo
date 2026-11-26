@@ -5,12 +5,13 @@ const path = require('path');
 const { KEEP_TITLE } = require('./capture');
 
 const R = (n) => path.join(__dirname, 'renderer', 'paint', n);
+let display = null; // bounds of the display to cover; set by main.js before drawing starts
 let win = null, ready = null, tw = null, tpos = null, pending = null;
 const cuts = {}; // screen rects punched out of the overlay so the windows beneath stay clickable: { toolbar, text }
 
 function ensure() {
   if (win && !win.isDestroyed()) return ready;
-  const b = screen.getPrimaryDisplay().bounds;
+  const b = display || screen.getPrimaryDisplay().bounds;
   win = new BrowserWindow({
     x: b.x, y: b.y, width: b.width, height: b.height, frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true, resizable: false,
     movable: false, hasShadow: false, focusable: false, show: false, enableLargerThanScreen: true, title: KEEP_TITLE,
@@ -86,4 +87,6 @@ ipcMain.on('livetext:done', (e, s) => {
 
 function send(c, a) { if (win && !win.isDestroyed()) win.webContents.send('cmd', c, a); }
 function destroy() { closeText(); if (win && !win.isDestroyed()) win.destroy(); win = null; ready = null; for (const k of Object.keys(cuts)) delete cuts[k]; }
-module.exports = { setDraw, setCut, send, destroy };
+/* A different display needs a new overlay window: drop the old one. */
+function setDisplay(b) { if (display && b && (display.x !== b.x || display.y !== b.y || display.width !== b.width || display.height !== b.height) && win && !win.isDestroyed()) { closeText(); win.destroy(); win = null; ready = null; } display = b; }
+module.exports = { setDisplay, setDraw, setCut, send, destroy };
