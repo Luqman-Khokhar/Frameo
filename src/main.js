@@ -20,6 +20,25 @@ const TB = { w: 272, h: 44, ph: 88, gap: 6 }; // ph = live-drawing palette heigh
 // On Linux/X11 Electron works in DIPs; physical pixels = DIPs × the display scale factor.
 const toPhys = (r) => { const f = screen.getPrimaryDisplay().scaleFactor || 1; return { x: Math.round(r.x * f), y: Math.round(r.y * f), width: Math.round(r.width * f), height: Math.round(r.height * f) }; };
 
+/* ---------------- IPC trust: only the main window may call these, and only on files Frameo manages ---------------- */
+const fromMain = (e) => !!(mainWin && !mainWin.isDestroyed() && e.sender === mainWin.webContents);
+const handle = (ch, fn) => ipcMain.handle(ch, (e, ...a) => { if (!fromMain(e)) throw new Error('forbidden'); return fn(e, ...a); });
+const realOf = (p) => { try { return typeof p === 'string' && p ? fs.realpathSync(p) : null; } catch (e) { return null; } };
+const isFile = (p) => { try { return fs.statSync(p).isFile(); } catch (e) { return false; } };
+const SAVED_RE = /^(Screenshot|Recording) .*\.(png|jpg|webp|mp4|webm)$/, COMPRESSED_RE = /\((medium|low)\)( \(\d+\))?\.mp4$/;
+const VIDEO_EXT = new Set(['.mp4', '.webm', '.mkv', '.mov', '.avi', '.m4v']);
+const picked = new Set(); // real paths the user chose in the compress file dialog
+/* A capture or compressed copy sitting directly in the configured folders (symlinks resolved), else null. */
+function itemPath(p) {
+  const real = realOf(p); if (!real || !isFile(real)) return null;
+  const st = settings.load(), dir = path.dirname(real), name = path.basename(real);
+  if (dir === realOf(st.saveDir) && SAVED_RE.test(name)) return real;
+  if (dir === realOf(st.compressDir) && COMPRESSED_RE.test(name)) return real;
+  return null;
+}
+/* A readable video file (compress source). */
+function videoPath(p) { const real = realOf(p); return real && isFile(real) && VIDEO_EXT.has(path.extname(real).toLowerCase()) ? real : null; }
+
 let mainWin = null, tray = null, toolbarWin = null, overlayWin = null, countdownWin = null;
 let env = { wayland: false, ffmpeg: true, helper: true, sinks: [], mics: [], defaultSink: '' };
 const rec = new capture.Recorder();
@@ -99,7 +118,7 @@ function pickRegion(init) {
     };
   });
 }
-ipcMain.handle('overlay:done', (_e, res) => { if (overlayDone) overlayDone(res); });
+ipcMain.handle('overlay:done', (e, res) => { if (overlayDone && overlayWin && !overlayWin.isDestroyed() && e.sender === overlayWin.webContents) overlayDone(res); });
 
 /* ---------------- items ---------------- */
 async function itemFor(file) {
@@ -255,18 +274,18 @@ function setAutostart(on) {
 }
 
 /* ---------------- IPC ---------------- */
-ipcMain.handle('state', async () => {
+handle('state', async () => {
   env = { ...env, ...(await system.probe()) };
   return { settings: settings.load(), env, recording: { active: rec.active, paused: rec.paused }, platform: process.platform };
 });
-ipcMain.handle('settings:save', (_e, patch) => {
+handle('settings:save', (_e, patch) => {
   const before = settings.load(); const after = settings.save(patch);
   if (after.launch !== before.launch) setAutostart(after.launch);
   let failed = [];
   if (patch && patch.keys) { failed = registerKeys(); updateTray(); }
   return { settings: after, failedKeys: failed };
 });
-ipcMain.handle('region:pick', async (_e, init) => {
+handle('region:pick', async (_e, init) => {
   const st = settings.load();
   if (mainWin) mainWin.hide();
   const res = await pickRegion({ ...init, dim: st.dim, badge: st.badge, ratios: st.ratios });
@@ -274,44 +293,48 @@ ipcMain.handle('region:pick', async (_e, init) => {
   return res;
 });
 function openEditor(p) {
-  const f = path.resolve(String(p || ''));
+  const f = realOf(p) || '';
   if (rec.active) return { error: 'recording' };
-  if (path.dirname(f) !== path.resolve(settings.load().saveDir) || !/^Screenshot .*\.(png|jpg|webp)$/.test(path.basename(f))) return { error: 'file' };
+  if (!f || path.dirname(f) !== realOf(settings.load().saveDir) || !/^Screenshot .*\.(png|jpg|webp)$/.test(path.basename(f))) return { error: 'file' };
   return editor.open(f, async (out) => toMain('captured', await itemFor(out)));
 }
-ipcMain.handle('editor:open', (_e, p) => openEditor(p));
-ipcMain.handle('shot', (_e, rect) => doScreenshot(rect));
-ipcMain.handle('rec:start', (_e, rect) => startRecording(rect));
-ipcMain.handle('rec:pause', pauseResume);
-ipcMain.handle('rec:resume', pauseResume);
-ipcMain.handle('rec:stop', stopRecording);
-ipcMain.handle('recents', recents);
-ipcMain.handle('item:delete', async (_e, p) => { try { await shell.trashItem(p); return true; } catch (e) { return false; } });
-ipcMain.handle('item:reveal', (_e, p) => shell.showItemInFolder(p));
-ipcMain.handle('item:open', (_e, p) => shell.openPath(p));
-ipcMain.handle('item:copy', (_e, p) => { clipboard.writeImage(nativeImage.createFromPath(p)); return true; });
-ipcMain.handle('dir:choose', async (_e, start) => {
+handle('editor:open', (_e, p) => openEditor(p));
+handle('shot', (_e, rect) => doScreenshot(rect));
+handle('rec:start', (_e, rect) => startRecording(rect));
+handle('rec:pause', pauseResume);
+handle('rec:resume', pauseResume);
+handle('rec:stop', stopRecording);
+handle('recents', recents);
+handle('item:delete', async (_e, p) => { const f = itemPath(p); if (!f) return false; try { await shell.trashItem(f); return true; } catch (e) { return false; } });
+handle('item:reveal', (_e, p) => { const f = itemPath(p); if (f) shell.showItemInFolder(f); });
+handle('item:open', (_e, p) => { const f = itemPath(p); return f ? shell.openPath(f) : ''; });
+handle('item:copy', (_e, p) => { const f = itemPath(p); if (!f || !/\.(png|jpg|webp)$/.test(f)) return false; clipboard.writeImage(nativeImage.createFromPath(f)); return true; });
+handle('dir:choose', async (_e, start) => {
   const r = await dialog.showOpenDialog(mainWin, { properties: ['openDirectory', 'createDirectory'], defaultPath: start || settings.load().saveDir });
   return r.canceled ? null : r.filePaths[0];
 });
 /* ---------------- compression ---------------- */
-ipcMain.handle('compress:pick', async () => {
+handle('compress:pick', async () => {
   const r = await dialog.showOpenDialog(mainWin, { properties: ['openFile'], filters: [{ name: 'Video', extensions: ['mp4', 'webm', 'mkv', 'mov', 'avi', 'm4v'] }] });
-  return r.canceled ? null : r.filePaths[0];
+  if (r.canceled) return null;
+  const real = realOf(r.filePaths[0]); if (real) picked.add(real);
+  return r.filePaths[0];
 });
-ipcMain.handle('compress:probe', async (_e, file) => {
+handle('compress:probe', async (_e, file) => {
   try {
-    const info = await compress.probe(String(file));
+    const src = videoPath(file); if (!src) return { error: 'Not a readable video file.' };
+    const info = await compress.probe(src);
     const plans = {}; for (const k of Object.keys(compress.PRESETS)) { const p = compress.plan(info, k); plans[k] = p.ok ? { ok: true, estBytes: p.targetBytes, height: p.height, fps: Math.round(p.fps) } : { ok: false, reason: p.reason }; }
     return { info: { path: info.file, name: path.basename(info.file), bytes: info.bytes, duration: info.duration, w: info.w, h: info.h, fps: Math.round(info.fps), hasAudio: info.hasAudio }, plans };
   } catch (e) { return { error: e.message }; }
 });
-ipcMain.handle('compress:start', async (_e, file, key, replaceOriginal) => {
+handle('compress:start', async (_e, file, key, replaceOriginal) => {
   if (rec.active) return { error: 'recording' };
   if (compressJob) return { error: 'busy' };
   let info, pl; const outDir = settings.load().compressDir;
   try {
-    info = await compress.probe(String(file)); pl = compress.plan(info, key);
+    const src = videoPath(file); if (!src) return { error: 'plan', message: 'Not a readable video file.' };
+    info = await compress.probe(src); pl = compress.plan(info, key);
     if (!pl.ok) return { error: 'plan', message: pl.reason };
     compress.preflight(pl, outDir);
   } catch (e) { return { error: e.code === 'ENOSPC' ? 'space' : 'plan', message: e.message }; }
@@ -319,19 +342,20 @@ ipcMain.handle('compress:start', async (_e, file, key, replaceOriginal) => {
   compressJob = job;
   job.promise.then(async (r) => {
     let trashed = false;
-    if (replaceOriginal) { try { await shell.trashItem(info.file); trashed = true; } catch (e) { /* original stays */ } }
+    if (replaceOriginal === true && (picked.has(info.file) || itemPath(info.file))) { try { await shell.trashItem(info.file); trashed = true; } catch (e) { /* original stays */ } }
     toMain('compress:done', { path: r.path, name: path.basename(r.path), bytes: r.bytes, origBytes: info.bytes, trashed });
     notify('Compression finished', path.basename(r.path));
   }).catch((e) => toMain('compress:done', e.cancelled ? { cancelled: true } : { error: 'failed', message: e.message }))
     .finally(() => { compressJob = null; });
   return { started: true };
 });
-ipcMain.handle('compress:cancel', () => { if (compressJob) compressJob.cancel(); });
-ipcMain.handle('win:min', () => mainWin && mainWin.minimize());
-ipcMain.handle('win:close', () => mainWin && mainWin.close());
-ipcMain.on('toolbar:pause', pauseResume);
-ipcMain.on('toolbar:stop', stopRecording);
-ipcMain.on('toolbar:move', (_e, x, y) => { if (toolbarWin && !toolbarWin.isDestroyed()) { toolbarWin.setBounds({ x: Math.round(x), y: Math.round(y), width: TB.w, height: paintOpen ? TB.h + TB.ph + TB.gap : TB.h }); live.setCut('toolbar', toolbarWin.getBounds()); } });
+handle('compress:cancel', () => { if (compressJob) compressJob.cancel(); });
+handle('win:min', () => mainWin && mainWin.minimize());
+handle('win:close', () => mainWin && mainWin.close());
+const fromToolbar = (e) => !!(toolbarWin && !toolbarWin.isDestroyed() && e.sender === toolbarWin.webContents);
+ipcMain.on('toolbar:pause', (e) => { if (fromToolbar(e)) pauseResume(); });
+ipcMain.on('toolbar:stop', (e) => { if (fromToolbar(e)) stopRecording(); });
+ipcMain.on('toolbar:move', (e, x, y) => { if (fromToolbar(e) && isFinite(x) && isFinite(y)) { toolbarWin.setBounds({ x: Math.round(x), y: Math.round(y), width: TB.w, height: paintOpen ? TB.h + TB.ph + TB.gap : TB.h }); live.setCut('toolbar', toolbarWin.getBounds()); } });
 ipcMain.on('paint:toggle', (e) => { if (toolbarWin && e.sender === toolbarWin.webContents) paintToggle(); });
 ipcMain.on('paint:cmd', (e, c, a) => {
   if (!toolbarWin || e.sender !== toolbarWin.webContents || !paintOpen) return;
@@ -353,4 +377,4 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => { /* stay in the tray */ });
 app.on('will-quit', () => { globalShortcut.unregisterAll(); if (recBase) fs.rmSync(recBase, { force: true }); capture.cleanupTmp(); });
 
-module.exports = { doScreenshot, startRecording, pauseResume, stopRecording, regionScreenshot, rec, getMain: () => mainWin, getToolbar: () => toolbarWin, getMode: () => recMode };
+module.exports = { itemPath, videoPath, doScreenshot, startRecording, pauseResume, stopRecording, regionScreenshot, rec, getMain: () => mainWin, getToolbar: () => toolbarWin, getMode: () => recMode };
