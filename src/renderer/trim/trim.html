@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Frameo — Trim &amp; split</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; media-src 'self' file:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<link rel="stylesheet" href="../style.css"><link rel="stylesheet" href="trim.css"></head>
+<body class="light">
+<div id="app">
+  <header id="tb">
+    <div class="segwrap" role="group" aria-label="Mode">
+      <button class="seg2 on" data-mode="split" aria-pressed="true" title="Keep one selected part">Split</button>
+      <button class="seg2" data-mode="trim" aria-pressed="false" title="Remove parts and keep the rest">Trim</button>
+    </div>
+    <span id="hint" class="sub"></span>
+    <span class="grow"></span>
+    <span class="sub" id="accl">Frame-accurate</span>
+    <button class="sw" id="precise" role="switch" aria-checked="false" aria-labelledby="accl" title="Re-encode for exact cut points (slower)"></button>
+    <button class="solid" id="export" disabled>Export</button>
+  </header>
+  <main id="work">
+    <div id="stage"><video id="v" preload="auto"></video><div id="msg" class="sub" role="status">Loading…</div></div>
+    <div id="tr">
+      <button class="ic" id="play" aria-label="Play" title="Play / pause (Space)"></button>
+      <span class="tn" id="cur">0:00.0</span><span class="sub tn">/ <span id="tot">0:00.0</span></span>
+      <span class="grow"></span>
+      <span class="sub" id="keyinfo"></span>
+    </div>
+    <div id="tl">
+      <canvas id="ruler" height="22"></canvas>
+      <div id="track" aria-label="Timeline"><canvas id="ticks" height="8"></canvas><div id="rs"></div></div>
+      <div id="ph" aria-hidden="true"></div>
+    </div>
+    <div id="ranges"></div>
+    <div id="foot" role="status" aria-live="polite"></div>
+  </main>
+  <div id="ov" hidden></div>
+</div>
+<script src="trim.js"></script>
+</body></html>
