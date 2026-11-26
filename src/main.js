@@ -42,6 +42,7 @@ function videoPath(p) { const real = realOf(p); return real && isFile(real) && V
 let mainWin = null, tray = null, toolbarWin = null, overlayWin = null, countdownWin = null;
 let env = { wayland: false, ffmpeg: true, helper: true, sinks: [], mics: [], defaultSink: '' };
 const rec = new capture.Recorder();
+rec.on('failed', (why) => { if (!rec.active) return; notify('Recording stopped', 'Capture failed: ' + why + '. Saving what was recorded.'); stopRecording(); });
 let recBase = null, recTimer = null, recMode = 'toolbar', busy = false, overlayDone = null, compressJob = null, paintOpen = false, paintUp = false;
 
 /* ---------------- windows ---------------- */
@@ -220,15 +221,17 @@ async function pauseResume() {
   if (toolbarWin && !toolbarWin.isDestroyed()) toolbarWin.webContents.send('tick', { ms: rec.ms(), paused: rec.paused });
   updateTray();
 }
-async function stopRecording() {
-  if (!rec.active) return null;
+let stopP = null; // one stop at a time: a second caller (toolbar, tray, quit, recorder failure) joins the first
+function stopRecording() { if (stopP) return stopP; if (!rec.active) return Promise.resolve(null); stopP = stopRecordingNow().finally(() => { stopP = null; }); return stopP; }
+async function stopRecordingNow() {
+  const show = () => { if (!app.isQuitting) showMain(); };
   clearInterval(recTimer); closeToolbar(); setTray(false);
   try {
     const r = await rec.stop();
     if (recBase) fs.rm(recBase, () => {}); recBase = null;
     const item = await itemFor(r.path);
-    showMain(); editor.restore(); toMain('captured', item); return { item };
-  } catch (e) { showMain(); editor.restore(); const info = errInfo(e); toMain('capture-error', info); return info; }
+    show(); editor.restore(); toMain('captured', item); return { item };
+  } catch (e) { show(); editor.restore(); const info = errInfo(e); toMain('capture-error', info); return info; }
 }
 
 /* ---------------- tray + shortcuts ---------------- */
@@ -375,6 +378,13 @@ app.whenReady().then(async () => {
   if (!process.argv.includes('--hidden')) createMain();
 });
 app.on('window-all-closed', () => { /* stay in the tray */ });
-app.on('will-quit', () => { globalShortcut.unregisterAll(); if (recBase) fs.rmSync(recBase, { force: true }); capture.cleanupTmp(); });
+/* Quitting mid-recording or mid-compression must not lose the recording or leave orphans: stop + save first, then quit. */
+let quitStopped = false;
+app.on('before-quit', (e) => {
+  app.isQuitting = true;
+  if (compressJob) compressJob.cancel();
+  if (rec.active && !quitStopped) { e.preventDefault(); quitStopped = true; stopRecording().finally(() => app.quit()); }
+});
+app.on('will-quit', () => { rec.kill(); globalShortcut.unregisterAll(); if (recBase) fs.rmSync(recBase, { force: true }); capture.cleanupTmp(); });
 
 module.exports = { itemPath, videoPath, doScreenshot, startRecording, pauseResume, stopRecording, regionScreenshot, rec, getMain: () => mainWin, getToolbar: () => toolbarWin, getMode: () => recMode };

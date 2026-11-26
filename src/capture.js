@@ -1,6 +1,7 @@
 // Screenshot + recording pipeline. Frames come from the xcap helper, which never
 // outputs Frameo's own windows; ffmpeg encodes them (and records audio via PulseAudio/PipeWire).
 const { spawn, execFile } = require('child_process');
+const { EventEmitter } = require('events');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -86,8 +87,9 @@ function audioSources(audio, env, st) {
   return out;
 }
 
-class Recorder {
-  constructor() { this.reset(); }
+/* Emits 'failed' (reason string) when the helper or ffmpeg dies while a segment is recording. The segments written so far are kept; call stop() to salvage them. */
+class Recorder extends EventEmitter {
+  constructor() { super(); this.reset(); }
   reset() { this.active = false; this.paused = false; this.segs = []; this.elapsed = 0; this.segStart = 0; this.cur = null; this.opts = null; }
 
   startSegment() {
@@ -106,11 +108,25 @@ class Recorder {
     args.push(file);
     const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'ignore', 'pipe'] });
     let ffErr = ''; ff.stderr.on('data', (d) => { ffErr += d; });
+    let hErr = ''; helper.stderr.on('data', (d) => { hErr = (hErr + d).slice(-300); });
     helper.stdout.pipe(ff.stdin); ff.stdin.on('error', () => {}); helper.stdout.on('error', () => {});
     const closed = new Promise((res) => ff.on('close', res));
-    this.cur = { helper, ff, file, closed, getErr: () => ffErr };
+    const c = this.cur = { helper, ff, file, closed, getErr: () => ffErr };
+    // Exits we did not ask for (endSegment clears this.cur first) mean the recording is dead: report it instead of ticking on over nothing.
+    ff.on('close', (code) => { if (this.cur === c) this.lost(c, (hErr || ffErr).trim().slice(-200) || 'ffmpeg exited unexpectedly (' + code + ')'); });
+    ff.on('error', (e) => { if (this.cur === c) this.lost(c, 'ffmpeg: ' + e.message); });
+    helper.on('error', (e) => { if (this.cur === c) this.lost(c, 'capture helper: ' + e.message); });
     this.segStart = Date.now();
   }
+  lost(c, reason) {
+    if (this.cur !== c) return; this.cur = null;
+    this.elapsed += Date.now() - this.segStart;
+    try { c.helper.kill('SIGTERM'); c.ff.kill('SIGKILL'); } catch (e) { /* already gone */ }
+    if (fs.existsSync(c.file) && fs.statSync(c.file).size > 0) this.segs.push(c.file);
+    this.emit('failed', reason);
+  }
+  /* Last resort on app exit: never leave capture processes behind. */
+  kill() { const c = this.cur; this.cur = null; if (c) { try { c.helper.kill('SIGKILL'); c.ff.kill('SIGKILL'); } catch (e) { /* ignore */ } } }
   async endSegment() {
     const c = this.cur; if (!c) return; this.cur = null;
     this.elapsed += Date.now() - this.segStart;
