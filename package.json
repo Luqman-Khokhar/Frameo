@@ -1,7 +1,7 @@
 {
   "name": "frameo",
   "productName": "Frameo",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Offline screenshot and screen-recording app. Its own controls never appear in captures.",
   "main": "src/main.js",
   "author": {
