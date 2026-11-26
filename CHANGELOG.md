@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-11-26)
 - UI refinement: shared design tokens (accent, chrome, spacing, radii), yellow reserved for primary actions and the selected editor tool, consistent hover/pressed/disabled/focus states, thin themed scrollbars.
 - Main window: denser Recording view so Recent gets more room, one-line recent rows with a clickable name, shorter times, `~` in the save path.
 - Annotation editor: canvas now fills the available stage exactly (it left a gap before), no scrollbar feedback, grouped tool buttons, accent for the selected tool and Save.
