@@ -7,7 +7,22 @@ const path = require('path');
 const { helperPath } = require('./system');
 
 const KEEP_TITLE = 'Frameo ink overlay'; // the live-drawing window: xcap must keep it in frames (see native/xcap.c --keep-title)
-const tmp = (n) => path.join(os.tmpdir(), 'frameo-' + process.pid + '-' + n);
+/* Private (0700) per-process temp dir: base snapshots contain the whole screen, so other local users must not read them. */
+let tmpDir = null;
+const tmp = (n) => {
+  if (!tmpDir || !fs.existsSync(tmpDir)) { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frameo-' + process.pid + '-')); fs.chmodSync(tmpDir, 0o700); }
+  return path.join(tmpDir, n);
+};
+function cleanupTmp() { if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true }); tmpDir = null; }
+/* Remove temp entries left by Frameo processes that no longer exist (crash / kill -9). */
+function sweepStaleTmp() {
+  let names = []; try { names = fs.readdirSync(os.tmpdir()); } catch (e) { return; }
+  for (const n of names) {
+    const m = /^frameo-(\d+)-/.exec(n); if (!m || Number(m[1]) === process.pid) continue;
+    try { process.kill(Number(m[1]), 0); continue; } catch (e) { if (e.code !== 'ESRCH') continue; }
+    try { fs.rmSync(path.join(os.tmpdir(), n), { recursive: true, force: true }); } catch (e) { /* ignore */ }
+  }
+}
 const pad = (n) => String(n).padStart(2, '0');
 function stamp() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`; }
 function uniquePath(dir, base, ext) { let p = path.join(dir, `${base}.${ext}`), i = 2; while (fs.existsSync(p)) p = path.join(dir, `${base} (${i++}).${ext}`); return p; }
@@ -127,4 +142,4 @@ class Recorder {
     return { path: out, ms };
   }
 }
-module.exports = { KEEP_TITLE, snapshotBase, screenshot, grabOnce, toolbarVisible, audioSources, Recorder, even, tmp };
+module.exports = { KEEP_TITLE, snapshotBase, screenshot, grabOnce, toolbarVisible, audioSources, Recorder, even, tmp, cleanupTmp, sweepStaleTmp };

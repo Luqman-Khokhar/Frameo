@@ -343,6 +343,7 @@ app.on('second-instance', showMain);
 app.whenReady().then(async () => {
   session.defaultSession.setPermissionRequestHandler((_wc, perm, cb) => cb(perm === 'media'));
   session.defaultSession.setPermissionCheckHandler((_wc, perm) => perm === 'media');
+  capture.sweepStaleTmp();
   env = { ...env, ...(await system.probe()) };
   tray = new Tray(nativeImage.createFromPath(asset('tray.png')).resize({ width: 22, height: 22 }));
   tray.on('click', showMain); updateTray();
@@ -350,6 +351,6 @@ app.whenReady().then(async () => {
   if (!process.argv.includes('--hidden')) createMain();
 });
 app.on('window-all-closed', () => { /* stay in the tray */ });
-app.on('will-quit', () => { globalShortcut.unregisterAll(); if (recBase) fs.rmSync(recBase, { force: true }); });
+app.on('will-quit', () => { globalShortcut.unregisterAll(); if (recBase) fs.rmSync(recBase, { force: true }); capture.cleanupTmp(); });
 
 module.exports = { doScreenshot, startRecording, pauseResume, stopRecording, regionScreenshot, rec, getMain: () => mainWin, getToolbar: () => toolbarWin, getMode: () => recMode };
