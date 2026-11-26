@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- UI refinement: shared design tokens (accent, chrome, spacing, radii), yellow reserved for primary actions and the selected editor tool, consistent hover/pressed/disabled/focus states, thin themed scrollbars.
+- Main window: denser Recording view so Recent gets more room, one-line recent rows with a clickable name, shorter times, `~` in the save path.
+- Annotation editor: canvas now fills the available stage exactly (it left a gap before), no scrollbar feedback, grouped tool buttons, accent for the selected tool and Save.
+- Settings: grouped rows with hairline separators; shortcuts show keycap badges, an editing state, in-app conflict detection and a confirmation toast.
 - Compression is easier to find: one-click Medium / Low buttons with real size estimates in the recording preview, a visible Compress button and file size on every recording in Recent, a clearer "Compress a video…" button, and a drop hint in the empty state.
 - Security: private 0700 temp dir for capture files; settings validated and written atomically; IPC restricted to the main window and to files Frameo manages.
 - Recording: a dead ffmpeg or capture helper is detected and what was recorded is saved; quitting mid-recording stops and saves first.

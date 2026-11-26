@@ -85,14 +85,14 @@ function fmtDur(s) { const m = Math.floor(s / 60), r = s % 60; return String(m).
 function fmtSize(b) { return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
 function when(t) {
   const d = new Date(t), n = new Date(), s = (n - d) / 1000, hm = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  if (s < 60) return 'Just now'; if (d.toDateString() === n.toDateString()) return 'Today, ' + hm;
+  if (s < 60) return 'Just now'; if (d.toDateString() === n.toDateString()) return hm;
   const y = new Date(n - 864e5); if (d.toDateString() === y.toDateString()) return 'Yesterday, ' + hm;
   return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ', ' + hm;
 }
 function recentHtml() {
   const head = `<div class="rhead"><span class="sh">Recent</span><span style="display:flex;gap:10px"><button class="chip" data-act="cmp-pick">${ico('shrink', 14)}Compress a video…</button>${S.recents.length ? `<button class="link" data-act="folder">${ico('folder', 14)}Open folder</button>` : ''}</span></div>`;
-  if (!S.recents.length) return `${head}<div class="empty"><svg viewBox="0 0 64 48" width="64" height="48" fill="none" aria-hidden="true"><path d="M8 16V9a3 3 0 0 1 3-3h7M46 6h7a3 3 0 0 1 3 3v7M56 32v7a3 3 0 0 1-3 3h-7M18 42h-7a3 3 0 0 1-3-3v-7" stroke="var(--text)" stroke-width="2.4" stroke-linecap="round"/><circle cx="32" cy="24" r="5" fill="#F2C46A"/></svg><b>Nothing captured yet</b><div class="sub" style="max-width:300px">Your screenshots and recordings will show up here. Try <span class="kbd">${keyText(S.st.keys.shotRegion)}</span> to grab a region without opening Frameo.</div><div class="sub" style="max-width:300px">Big video? Drop it on this window or use <b>Compress a video…</b> to shrink it to half or a fifth of its size.</div></div>`;
-  return `${head}<div class="rlist">${S.recents.map((it, i) => `<div class="rrow"><button class="thumb" data-act="open-preview" data-i="${i}" aria-label="Open ${esc(it.name)}">${it.thumb ? `<img src="${it.thumb}" alt="">` : ''}${it.kind === 'rec' ? `<span class="play"><svg viewBox="0 0 20 20" width="8" height="8"><path d="M6 3.5l11 6.5-11 6.5z" fill="#FCF0DA"/></svg></span>` : ''}</button><div class="rmeta"><div class="n">${esc(it.name)}</div><div class="sub tn">${it.kind === 'rec' ? fmtDur(it.dur) + ' · ' + fmtSize(it.bytes) : 'Screenshot'} · ${when(it.mtime)}</div></div>${it.kind === 'rec' ? `<button class="chip" data-act="cmp-row" data-i="${i}" aria-label="Compress ${esc(it.name)}">${ico('shrink', 14)}Compress</button>` : ''}<div class="acts"><button class="ic" data-act="open-preview" data-i="${i}" aria-label="Open">${ico('open', 16)}</button><button class="ic" data-act="reveal" data-i="${i}" aria-label="Reveal in folder">${ico('folder', 16)}</button><button class="ic dng" data-act="del" data-i="${i}" aria-label="Move to Trash">${ico('trash', 16)}</button></div></div>`).join('')}</div>`;
+  if (!S.recents.length) return `${head}<div class="empty"><svg viewBox="0 0 64 48" width="64" height="48" fill="none" aria-hidden="true"><path d="M8 16V9a3 3 0 0 1 3-3h7M46 6h7a3 3 0 0 1 3 3v7M56 32v7a3 3 0 0 1-3 3h-7M18 42h-7a3 3 0 0 1-3-3v-7" stroke="var(--text)" stroke-width="2.4" stroke-linecap="round"/><circle cx="32" cy="24" r="5" style="fill:var(--accent)"/></svg><b>Nothing captured yet</b><div class="sub" style="max-width:300px">Your screenshots and recordings will show up here. Try <span class="kbd">${keyText(S.st.keys.shotRegion)}</span> to grab a region without opening Frameo.</div><div class="sub" style="max-width:300px">Big video? Drop it on this window or use <b>Compress a video…</b> to shrink it to half or a fifth of its size.</div></div>`;
+  return `${head}<div class="rlist">${S.recents.map((it, i) => `<div class="rrow"><button class="thumb" data-act="open-preview" data-i="${i}" tabindex="-1" aria-hidden="true">${it.thumb ? `<img src="${it.thumb}" alt="">` : ''}${it.kind === 'rec' ? `<span class="play"><svg viewBox="0 0 20 20" width="8" height="8"><path d="M6 3.5l11 6.5-11 6.5z" style="fill:var(--chromeInk)"/></svg></span>` : ''}</button><button class="rmeta" data-act="open-preview" data-i="${i}" aria-label="Open ${esc(it.name)}"><div class="n">${esc(it.name)}</div><div class="sub tn">${it.kind === 'rec' ? fmtDur(it.dur) + ' · ' + fmtSize(it.bytes) : 'Screenshot'} · ${when(it.mtime)}</div></button>${it.kind === 'rec' ? `<button class="chip" data-act="cmp-row" data-i="${i}" aria-label="Compress ${esc(it.name)}">${ico('shrink', 14)}Compress</button>` : ''}<div class="acts"><button class="ic" data-act="reveal" data-i="${i}" aria-label="Reveal in folder">${ico('folder', 16)}</button><button class="ic dng" data-act="del" data-i="${i}" aria-label="Move to Trash">${ico('trash', 16)}</button></div></div>`).join('')}</div>`;
 }
 function mainHtml() {
   const m = S.mode, isRec = m === 'rec', { c, src, size } = cur(), k = S.st.keys, blocked = !!blockedReason();
@@ -107,7 +107,7 @@ function mainHtml() {
     <div class="modes"><button class="seg ${m === 'shot' ? 'on' : ''}" data-act="mode" data-m="shot">${ico('camera')}Screenshot</button><button class="seg ${isRec ? 'on' : ''}" data-act="mode" data-m="rec">${ico('video')}Recording</button></div>
     <div class="srcs">${[['full', 'Full screen', 'full'], ['region', 'Region', 'region'], ['custom', 'Custom size', 'custom']].map(([id, l, i]) => `<button class="src ${src === id ? 'on' : ''}" data-act="src" data-s="${id}">${ico(i)}${l}</button>`).join('')}</div>
     ${dimsHtml()}${audio}
-    <div style="flex:none"><button class="primary" data-act="go" ${blocked || S.busy ? 'disabled' : ''}>${S.busy ? 'Working…' : (isRec ? '<svg viewBox="0 0 20 20" width="16" height="16"><circle cx="10" cy="10" r="6" fill="#3A3B36"/></svg>' : ico('camera')) + label + `<span class="kbd">${key}</span>`}</button></div>
+    <div style="flex:none"><button class="primary" data-act="go" ${blocked || S.busy ? 'disabled' : ''}>${S.busy ? 'Working…' : (isRec ? '<svg viewBox="0 0 20 20" width="16" height="16"><circle cx="10" cy="10" r="6" fill="currentColor"/></svg>' : ico('camera')) + label + `<span class="kbd">${key}</span>`}</button></div>
     <div class="recent">${recentHtml()}</div></div>`;
 }
 /* ---------- settings ---------- */
@@ -134,8 +134,9 @@ function settingsHtml() {
   }
   if (S.tab === 'keys') {
     const rows = [['shotFull', 'Capture full screen'], ['shotRegion', 'Capture region'], ['rec', 'Start / stop recording'], ['pause', 'Pause / resume'], ['paint', 'Draw on screen while recording']];
-    body = `<div class="grp" style="gap:8px"><span class="sh">Global shortcuts</span>${rows.map(([id, l]) => `<div class="line" style="min-height:40px"><span class="t">${l}</span><div class="row">${S.editKey === id ? `<span class="sub" style="color:var(--text)">Press new shortcut…</span><button class="ghost" data-act="key-cancel">Cancel</button>` : `<span style="display:flex;gap:4px">${st.keys[id].split('+').map((x) => `<span class="kbd">${x === 'Control' ? 'Ctrl' : x}</span>`).join('')}</span><button class="ghost" data-act="key-edit" data-id="${id}">Change</button>`}</div></div>`).join('')}<div class="sub" style="margin-top:6px" id="keyNote">Shortcuts work when Frameo is in the tray, including during a recording.</div></div>`;
+    body = `<div class="grp rows"><span class="sh">Global shortcuts</span>${rows.map(([id, l]) => `<div class="line ${S.editKey === id ? 'editing' : ''}"><span class="t">${l}</span><div class="row">${S.editKey === id ? `<span class="kbd ph" aria-live="polite">Press keys…</span><button class="ghost" data-act="key-cancel">Cancel</button>` : `<span style="display:flex;gap:4px">${st.keys[id].split('+').map((x) => `<span class="kbd">${x === 'Control' ? 'Ctrl' : x}</span>`).join('')}</span><button class="ghost" data-act="key-edit" data-id="${id}">Change</button>`}</div></div>`).join('')}<div class="note" style="margin-top:10px" id="keyNote" role="status">${S.editKey ? 'Press the new combination. Esc cancels.' : 'Shortcuts work when Frameo is in the tray, including during a recording.'}</div></div>`;
   }
+  body = body.replace(/<div class="grp">/g, '<div class="grp rows">');
   return `<div class="settings"><div class="shead"><button class="ic" data-act="back" aria-label="Back">${ico('back', 18)}</button><span class="disp">Settings</span></div><div class="modes">${tabs.map(([id, l]) => `<button class="seg ${S.tab === id ? 'on' : ''}" data-act="tab" data-t="${id}">${l}</button>`).join('')}</div><div class="sbody">${body}</div></div>`;
 }
 function defDims(which, note) {
@@ -144,7 +145,7 @@ function defDims(which, note) {
 }
 function statusHtml() {
   const bad = !!blockedReason();
-  return `<span><i class="dot ${bad ? 'bad' : ''}"></i>${bad ? 'Capture unavailable' : 'Ready · saving to ' + esc(S.st.saveDir.replace(/^.*\/(Pictures\/)/, '$1'))}</span><span>${ico('shield', 14)}${bad ? 'See notice above' : 'Controls never captured · verified'}</span>`;
+  return `<span><i class="dot ${bad ? 'bad' : ''}"></i>${bad ? 'Capture unavailable' : 'Ready · saving to ' + esc(S.st.saveDir.replace(/^\/home\/[^/]+/, '~'))}</span><span>${ico('shield', 14)}${bad ? 'See notice above' : 'Controls never captured · verified'}</span>`;
 }
 function render() {
   document.body.className = S.st.theme;
@@ -179,7 +180,7 @@ async function loadCmpHint(it) {
   box.innerHTML = cmpHintHtml(r, it); if (!box.innerHTML) box.hidden = true;
 }
 let toastT;
-function toast(msg) { const t = $('#toast'); t.innerHTML = `<svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="#F2C46A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg>${esc(msg)}`; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 2200); }
+function toast(msg) { const t = $('#toast'); t.innerHTML = `<svg viewBox="0 0 20 20" width="15" height="15" fill="none" style="stroke:var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg>${esc(msg)}`; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 2200); }
 
 /* ---------- actions ---------- */
 async function refreshRecents() { S.recents = await api.recents(); }
@@ -275,11 +276,16 @@ document.addEventListener('keydown', async (e) => {
   if (e.key === 'Escape') { S.editKey = null; return render(); }
   if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return;
   const mods = [e.ctrlKey && 'Control', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Super'].filter(Boolean);
-  if (!mods.length) { const n = $('#keyNote'); if (n) n.textContent = 'Include at least one modifier (Ctrl, Alt, Shift or Super).'; return; }
+  const note = (t, err) => { const n = $('#keyNote'); if (n) { n.textContent = t; n.classList.toggle('err', !!err); } };
+  if (!mods.length) return note('Include at least one modifier (Ctrl, Alt, Shift or Super).', true);
   const k = e.key.length === 1 ? e.key.toUpperCase() : e.key === ' ' ? 'Space' : e.key.replace('Arrow', '');
-  const id = S.editKey; const r = await save({ keys: { [id]: [...mods, k].join('+') } });
+  const id = S.editKey, combo = [...mods, k].join('+'), names = { shotFull: 'Capture full screen', shotRegion: 'Capture region', rec: 'Start / stop recording', pause: 'Pause / resume', paint: 'Draw on screen while recording' };
+  const clash = Object.keys(S.st.keys).find((o) => o !== id && S.st.keys[o].toLowerCase() === combo.toLowerCase());
+  if (clash) return note('Already used for “' + (names[clash] || clash) + '”. Press a different combination.', true);
+  const r = await save({ keys: { [id]: combo } });
   S.editKey = null; render();
-  if (r.failedKeys && r.failedKeys.length) { const n = $('#keyNote'); if (n) n.textContent = 'That shortcut is already used by another app. Pick a different one.'; }
+  if (r.failedKeys && r.failedKeys.includes(id)) { const n = $('#keyNote'); if (n) { n.textContent = 'That shortcut is already used by another app. Pick a different one.'; n.classList.add('err'); } }
+  else toast('Shortcut updated');
 });
 
 /* ---------- live level meters (only for sources that are switched on, in Recording mode) ---------- */

@@ -8,7 +8,9 @@ let P = null, bmp = null, mime = 'image/png', kScale = 1, tx = null, msgT = 0;
 function say(t) { msg.textContent = t; clearTimeout(msgT); msgT = setTimeout(() => (msg.textContent = ''), 2500); }
 function fit() {
   if (!bmp) return;
-  const s = Math.min((stage.clientWidth - 32) / bmp.width, (stage.clientHeight - 32) / bmp.height, 1);
+  const cs = getComputedStyle(stage), r = stage.getBoundingClientRect(); // content box = rect minus padding (clientHeight would include scrollbars and padding)
+  const w = r.width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), h = r.height - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const s = Math.min(w / bmp.width, h / bmp.height, 1);
   cv.style.width = Math.max(1, Math.floor(bmp.width * s)) + 'px'; cv.style.height = Math.max(1, Math.floor(bmp.height * s)) + 'px';
 }
 const disp = () => cv.getBoundingClientRect().width / cv.width; // css px per canvas px
