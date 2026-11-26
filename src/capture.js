@@ -1,13 +1,29 @@
 // Screenshot + recording pipeline. Frames come from the xcap helper, which never
 // outputs Frameo's own windows; ffmpeg encodes them (and records audio via PulseAudio/PipeWire).
 const { spawn, execFile } = require('child_process');
+const { EventEmitter } = require('events');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { helperPath } = require('./system');
 
 const KEEP_TITLE = 'Frameo ink overlay'; // the live-drawing window: xcap must keep it in frames (see native/xcap.c --keep-title)
-const tmp = (n) => path.join(os.tmpdir(), 'frameo-' + process.pid + '-' + n);
+/* Private (0700) per-process temp dir: base snapshots contain the whole screen, so other local users must not read them. */
+let tmpDir = null;
+const tmp = (n) => {
+  if (!tmpDir || !fs.existsSync(tmpDir)) { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frameo-' + process.pid + '-')); fs.chmodSync(tmpDir, 0o700); }
+  return path.join(tmpDir, n);
+};
+function cleanupTmp() { if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true }); tmpDir = null; }
+/* Remove temp entries left by Frameo processes that no longer exist (crash / kill -9). */
+function sweepStaleTmp() {
+  let names = []; try { names = fs.readdirSync(os.tmpdir()); } catch (e) { return; }
+  for (const n of names) {
+    const m = /^frameo-(\d+)-/.exec(n); if (!m || Number(m[1]) === process.pid) continue;
+    try { process.kill(Number(m[1]), 0); continue; } catch (e) { if (e.code !== 'ESRCH') continue; }
+    try { fs.rmSync(path.join(os.tmpdir(), n), { recursive: true, force: true }); } catch (e) { /* ignore */ }
+  }
+}
 const pad = (n) => String(n).padStart(2, '0');
 function stamp() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`; }
 function uniquePath(dir, base, ext) { let p = path.join(dir, `${base}.${ext}`), i = 2; while (fs.existsSync(p)) p = path.join(dir, `${base} (${i++}).${ext}`); return p; }
@@ -71,8 +87,11 @@ function audioSources(audio, env, st) {
   return out;
 }
 
-class Recorder {
-  constructor() { this.reset(); }
+/* Emits 'failed' (reason string) when the helper or ffmpeg dies while a segment is recording. The segments written so far are kept; call stop() to salvage them. */
+/* SIGTERM, then SIGKILL if xcap is still alive a second later (it can sit in a blocked write after ffmpeg is gone). */
+const killHelper = (h) => { h.kill('SIGTERM'); setTimeout(() => { if (h.exitCode === null && h.signalCode === null) h.kill('SIGKILL'); }, 1000).unref(); };
+class Recorder extends EventEmitter {
+  constructor() { super(); this.reset(); }
   reset() { this.active = false; this.paused = false; this.segs = []; this.elapsed = 0; this.segStart = 0; this.cur = null; this.opts = null; }
 
   startSegment() {
@@ -91,15 +110,29 @@ class Recorder {
     args.push(file);
     const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'ignore', 'pipe'] });
     let ffErr = ''; ff.stderr.on('data', (d) => { ffErr += d; });
+    let hErr = ''; helper.stderr.on('data', (d) => { hErr = (hErr + d).slice(-300); });
     helper.stdout.pipe(ff.stdin); ff.stdin.on('error', () => {}); helper.stdout.on('error', () => {});
     const closed = new Promise((res) => ff.on('close', res));
-    this.cur = { helper, ff, file, closed, getErr: () => ffErr };
+    const c = this.cur = { helper, ff, file, closed, getErr: () => ffErr };
+    // Exits we did not ask for (endSegment clears this.cur first) mean the recording is dead: report it instead of ticking on over nothing.
+    ff.on('close', (code) => { if (this.cur === c) this.lost(c, (hErr || ffErr).trim().slice(-200) || 'ffmpeg exited unexpectedly (' + code + ')'); });
+    ff.on('error', (e) => { if (this.cur === c) this.lost(c, 'ffmpeg: ' + e.message); });
+    helper.on('error', (e) => { if (this.cur === c) this.lost(c, 'capture helper: ' + e.message); });
     this.segStart = Date.now();
   }
+  lost(c, reason) {
+    if (this.cur !== c) return; this.cur = null;
+    this.elapsed += Date.now() - this.segStart;
+    try { killHelper(c.helper); c.ff.kill('SIGKILL'); } catch (e) { /* already gone */ }
+    if (fs.existsSync(c.file) && fs.statSync(c.file).size > 0) this.segs.push(c.file);
+    this.emit('failed', reason);
+  }
+  /* Last resort on app exit: never leave capture processes behind. */
+  kill() { const c = this.cur; this.cur = null; if (c) { try { c.helper.kill('SIGKILL'); c.ff.kill('SIGKILL'); } catch (e) { /* ignore */ } } }
   async endSegment() {
     const c = this.cur; if (!c) return; this.cur = null;
     this.elapsed += Date.now() - this.segStart;
-    c.helper.kill('SIGTERM');
+    killHelper(c.helper);
     await new Promise((r) => setTimeout(r, 150));
     c.ff.kill('SIGINT');
     const t = setTimeout(() => c.ff.kill('SIGKILL'), 6000);
@@ -127,4 +160,4 @@ class Recorder {
     return { path: out, ms };
   }
 }
-module.exports = { KEEP_TITLE, snapshotBase, screenshot, grabOnce, toolbarVisible, audioSources, Recorder, even, tmp };
+module.exports = { KEEP_TITLE, snapshotBase, screenshot, grabOnce, toolbarVisible, audioSources, Recorder, even, tmp, cleanupTmp, sweepStaleTmp };
